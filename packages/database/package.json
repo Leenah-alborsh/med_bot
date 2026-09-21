@@ -1,0 +1,36 @@
+{
+  "name": "@medical/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "dotenv -e ../../.env -e ../../.env.example -- prisma generate \u0026\u0026 tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "lint": "eslint .",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "db:generate": "dotenv -e ../../.env -e ../../.env.example -- prisma generate --config prisma.config.ts",
+    "db:format": "dotenv -e ../../.env -e ../../.env.example -- prisma format --config prisma.config.ts",
+    "db:validate": "dotenv -e ../../.env -e ../../.env.example -- prisma validate --config prisma.config.ts",
+    "db:migrate": "dotenv -e ../../.env -e ../../.env.example -- prisma migrate dev --config prisma.config.ts",
+    "db:seed": "dotenv -e ../../.env -e ../../.env.example -- prisma db seed --config prisma.config.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0"
+  },
+  "devDependencies": {
+    "@medical/config": "workspace:*",
+    "@medical/shared": "workspace:*",
+    "dotenv-cli": "^7.4.4",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2"
+  }
+}

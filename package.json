@@ -1,0 +1,35 @@
+{
+  "name": "medical-telegram-platform",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r --sort build",
+    "lint": "pnpm -r --sort lint",
+    "type-check": "pnpm -r --sort type-check",
+    "test": "pnpm -r --sort test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:generate": "pnpm --filter @medical/database db:generate",
+    "db:format": "pnpm --filter @medical/database db:format",
+    "db:validate": "pnpm --filter @medical/database db:validate",
+    "db:migrate": "pnpm --filter @medical/database db:migrate",
+    "db:seed": "pnpm --filter @medical/database db:seed",
+    "admin:bootstrap": "pnpm --filter @medical/api admin:bootstrap"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@next/eslint-plugin-next": "^15.5.25",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.19.0",
+    "vitest": "^2.1.8"
+  }
+}

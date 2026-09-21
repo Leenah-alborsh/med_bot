@@ -1,0 +1,308 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BotGroupType {
+  PRECLINICAL
+  CLINICAL
+}
+
+enum BotStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+}
+
+enum AdminStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum AdminSetupTokenPurpose {
+  ACCOUNT_SETUP
+  PASSWORD_RESET
+}
+
+model Bot {
+  id               String                 @id @default(uuid()) @db.Uuid
+  key              String                 @unique
+  displayName      String
+  telegramUsername String?
+  tokenReference   String?
+  groupType        BotGroupType
+  status           BotStatus              @default(DRAFT)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  yearVisibility   AcademicYearBot[]
+  memberships      StudentBotMembership[]
+  adminScopes      AdminScope[]
+
+  @@index([groupType, status])
+}
+
+model Student {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  telegramUserId         BigInt                 @unique
+  username               String?
+  firstName              String?
+  lastName               String?
+  preferredLanguage      String                 @default("ar")
+  selectedAcademicYearId String?                @db.Uuid
+  isBlocked              Boolean                @default(false)
+  firstSeenAt            DateTime               @default(now())
+  lastSeenAt             DateTime               @default(now())
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  selectedAcademicYear   AcademicYear?          @relation(fields: [selectedAcademicYearId], references: [id], onDelete: SetNull)
+  memberships            StudentBotMembership[]
+
+  @@index([telegramUserId])
+  @@index([selectedAcademicYearId])
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+}
+
+model StudentBotMembership {
+  id              String   @id @default(uuid()) @db.Uuid
+  studentId       String   @db.Uuid
+  botId           String   @db.Uuid
+  firstSeenAt     DateTime @default(now())
+  lastInteraction DateTime @default(now())
+  isBlocked       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  bot             Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, botId])
+  @@index([botId, isBlocked])
+  @@index([lastInteraction])
+}
+
+model AcademicYear {
+  id            String            @id @default(uuid()) @db.Uuid
+  number        Int               @unique
+  nameAr        String
+  nameEn        String
+  isActive      Boolean           @default(true)
+  displayOrder  Int
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  botVisibility AcademicYearBot[]
+  semesters     Semester[]
+  students      Student[]
+  adminScopes   AdminScope[]
+
+  @@index([isActive, displayOrder])
+}
+
+model AcademicYearBot {
+  id             String       @id @default(uuid()) @db.Uuid
+  academicYearId String       @db.Uuid
+  botId          String       @db.Uuid
+  createdAt      DateTime     @default(now())
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  bot            Bot          @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([academicYearId, botId])
+  @@index([botId])
+}
+
+model Semester {
+  id             String       @id @default(uuid()) @db.Uuid
+  academicYearId String       @db.Uuid
+  nameAr         String
+  nameEn         String
+  displayOrder   Int
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  courses        Course[]
+
+  @@unique([academicYearId, displayOrder])
+  @@index([isActive, displayOrder])
+}
+
+model Course {
+  id            String       @id @default(uuid()) @db.Uuid
+  semesterId    String       @db.Uuid
+  nameAr        String
+  nameEn        String
+  descriptionAr String?
+  descriptionEn String?
+  displayOrder  Int
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  semester      Semester     @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  sections      Section[]
+  adminScopes   AdminScope[]
+
+  @@index([semesterId, isActive, displayOrder])
+}
+
+model Section {
+  id           String    @id @default(uuid()) @db.Uuid
+  courseId     String    @db.Uuid
+  parentId     String?   @db.Uuid
+  nameAr       String
+  nameEn       String
+  displayOrder Int
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  course       Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  parent       Section?  @relation("SectionHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Section[] @relation("SectionHierarchy")
+
+  @@index([courseId, parentId, isActive, displayOrder])
+}
+
+model AdminUser {
+  id                 String            @id @default(uuid()) @db.Uuid
+  email              String            @unique
+  passwordHash       String?
+  telegramUserId     BigInt?           @unique
+  displayNameAr      String
+  displayNameEn      String
+  status             AdminStatus       @default(PENDING)
+  mustChangePassword Boolean           @default(true)
+  lastLoginAt        DateTime?
+  failedLoginCount   Int               @default(0)
+  lockedUntil        DateTime?
+  passwordChangedAt  DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  roles              AdminRole[]
+  scopes             AdminScope[]
+  auditLogs          AuditLog[]
+  sessions           AdminSession[]
+  setupTokens        AdminSetupToken[]
+
+  @@index([status])
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique
+  name        String
+  nameAr      String
+  nameEn      String
+  description String?
+  isSystem    Boolean          @default(false)
+  isProtected Boolean          @default(false)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  admins      AdminRole[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique
+  description String?
+  labelAr     String
+  labelEn     String
+  isReserved  Boolean          @default(false)
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  roles       RolePermission[]
+}
+
+model AdminRole {
+  id          String    @id @default(uuid()) @db.Uuid
+  adminUserId String    @db.Uuid
+  roleId      String    @db.Uuid
+  createdAt   DateTime  @default(now())
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  role        Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@unique([adminUserId, roleId])
+}
+
+model RolePermission {
+  id           String     @id @default(uuid()) @db.Uuid
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  createdAt    DateTime   @default(now())
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Restrict)
+
+  @@unique([roleId, permissionId])
+}
+
+model AdminScope {
+  id             String        @id @default(uuid()) @db.Uuid
+  adminUserId    String        @db.Uuid
+  botId          String?       @db.Uuid
+  academicYearId String?       @db.Uuid
+  courseId       String?       @db.Uuid
+  createdAt      DateTime      @default(now())
+  adminUser      AdminUser     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  bot            Bot?          @relation(fields: [botId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  course         Course?       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, botId, academicYearId, courseId])
+  @@index([botId])
+  @@index([academicYearId])
+  @@index([courseId])
+}
+
+model AuditLog {
+  id         String     @id @default(uuid()) @db.Uuid
+  actorId    String?    @db.Uuid
+  actionKey  String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime   @default(now())
+  actor      AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actionKey, createdAt])
+}
+
+model AdminSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  adminUserId String    @db.Uuid
+  tokenHash   String    @unique
+  csrfHash    String
+  expiresAt   DateTime
+  lastUsedAt  DateTime  @default(now())
+  revokedAt   DateTime?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, expiresAt])
+  @@index([expiresAt, revokedAt])
+}
+
+model AdminSetupToken {
+  id          String                 @id @default(uuid()) @db.Uuid
+  adminUserId String                 @db.Uuid
+  tokenHash   String                 @unique
+  purpose     AdminSetupTokenPurpose @default(ACCOUNT_SETUP)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime               @default(now())
+  adminUser   AdminUser              @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, purpose, expiresAt])
+}

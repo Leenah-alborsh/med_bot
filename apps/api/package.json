@@ -1,0 +1,39 @@
+{
+  "name": "@medical/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "lint": "eslint .",
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "admin:bootstrap": "dotenv -e ../../.env -e ../../.env.example -- tsx src/bootstrap-super-admin.ts"
+  },
+  "dependencies": {
+    "@medical/database": "workspace:*",
+    "@medical/shared": "workspace:*",
+    "@nestjs/common": "^10.4.15",
+    "@nestjs/config": "^3.3.0",
+    "@nestjs/core": "^10.4.15",
+    "@nestjs/platform-express": "^10.4.15",
+    "@nestjs/swagger": "^8.1.0",
+    "argon2": "^0.45.1",
+    "cookie-parser": "^1.4.7",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@medical/config": "workspace:*",
+    "@nestjs/cli": "^10.4.8",
+    "@nestjs/testing": "^10.4.15",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.0",
+    "dotenv-cli": "^7.4.4",
+    "ts-loader": "^9.5.1",
+    "tsx": "^4.19.2"
+  }
+}
