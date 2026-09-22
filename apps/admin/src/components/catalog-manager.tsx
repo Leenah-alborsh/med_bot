@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { clientApi } from '../lib/client-api';
 
 type Item = { id: string; nameAr: string; nameEn: string; displayOrder: number; isActive: boolean };
-type Option = { id: string; nameAr: string };
+type Option = { id: string; nameAr: string; academicYearId?: string };
 type Kind = 'years' | 'semesters' | 'courses' | 'sections';
 const labels: Record<Kind, { title: string; singular: string }> = {
   years: {
@@ -20,13 +20,20 @@ export function CatalogManager({
   kind,
   items,
   parents = [],
+  years = [],
 }: {
   kind: Kind;
   items: Item[];
   parents?: Option[];
+  years?: Option[];
 }) {
   const router = useRouter();
   const [message, setMessage] = useState('');
+  const [selectedYearId, setSelectedYearId] = useState('');
+  const visibleParents =
+    kind === 'courses'
+      ? parents.filter((parent) => parent.academicYearId === selectedYearId)
+      : parents;
   const parentKey =
     kind === 'semesters' ? 'academicYearId' : kind === 'courses' ? 'semesterId' : 'courseId';
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -117,14 +124,33 @@ export function CatalogManager({
             <Plus size={18} />
             <h2>إضافة {labels[kind].singular}</h2>
           </div>
+          {kind === 'courses' && (
+            <label>
+              السنة الدراسية
+              <select
+                value={selectedYearId}
+                onChange={(event) => setSelectedYearId(event.target.value)}
+                required
+              >
+                <option value="">اختر السنة</option>
+                {years.map((year) => (
+                  <option key={year.id} value={year.id}>
+                    {year.nameAr}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {kind !== 'years' && (
             <label>
-              العنصر الأب
-              <select name={parentKey} required>
-                <option value="">اختر</option>
-                {parents.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nameAr}
+              {kind === 'courses' ? 'الفصل الدراسي' : 'العنصر الأب'}
+              <select name={parentKey} required disabled={kind === 'courses' && !selectedYearId}>
+                <option value="">
+                  {kind === 'courses' && !selectedYearId ? 'اختر السنة أولًا' : 'اختر'}
+                </option>
+                {visibleParents.map((parent) => (
+                  <option key={parent.id} value={parent.id}>
+                    {parent.nameAr}
                   </option>
                 ))}
               </select>
