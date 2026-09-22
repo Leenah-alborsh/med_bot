@@ -2,10 +2,30 @@ import { createReadStream, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { PrismaClient } from '@medical/database';
 import { Bot, InlineKeyboard, InputFile, type Context } from 'grammy';
+import {
+  BACK_TEXT,
+  HOME_TEXT,
+  STAGES,
+  navigationKeyboard,
+  previousLevel,
+  resolveVisibleOption,
+  stageKeyboard,
+  visibleOptions,
+  type MenuOption,
+  type NavigationLevel,
+} from './navigation.js';
 
 type Options = { token: string; prisma: PrismaClient; uploadDirectory: string };
-const PAGE_SIZE = 8;
-const cb = (action: string, id = '0', page = 0) => `${action}:${id}:${page}`;
+type Membership = Awaited<ReturnType<PrismaClient['studentBotMembership']['upsert']>>;
+type Identity = {
+  student: Awaited<ReturnType<PrismaClient['student']['upsert']>>;
+  membership: Membership;
+};
+
+const reportCallback = (id: string) => `report:${id}`;
+export const externalUrlKeyboard = (url: string) => new InlineKeyboard().url('فتح الرابط', url);
+export const brokenReportKeyboard = (id: string) =>
+  new InlineKeyboard().text('الإبلاغ عن ملف تالف', reportCallback(id));
 export const publishedContentWhere = (sectionId: string) => ({
   sectionId,
   state: 'PUBLISHED' as const,
@@ -14,33 +34,26 @@ export const publishedContentWhere = (sectionId: string) => ({
 });
 export const brokenReportSince = (now = Date.now()) => new Date(now - 86_400_000);
 export function parseCallbackData(data: string) {
-  const match = /^([a-z]+):([0-9a-f-]{1,36}|[1-6]|0):(\d{1,3})$/.exec(data);
-  return match ? { action: match[1]!, id: match[2]!, page: Number(match[3]) } : null;
+  const match = /^report:([0-9a-f-]{1,36})$/.exec(data);
+  return match ? { action: 'report' as const, id: match[1]! } : null;
 }
+
+const promptFor = (level: NavigationLevel, hasOptions: boolean) => {
+  if (!hasOptions) return 'لا توجد خيارات متاحة حالياً.';
+  return {
+    STAGE: 'اختر المرحلة:',
+    YEAR: 'اختر السنة الدراسية:',
+    SEMESTER: 'اختر الفصل الدراسي:',
+    COURSE: 'اختر المادة:',
+    SECTION: 'اختر القسم:',
+    CONTENT: 'اختر المحتوى:',
+  }[level];
+};
+
 export function createMedicalBot({ token, prisma }: Options) {
   const bot = new Bot(token);
-  const home = () =>
-    new InlineKeyboard()
-      .text(
-        '\u0627\u0644\u0633\u0646\u0648\u0627\u062a \u0627\u0644\u0623\u0648\u0644\u0649\u2013\u0627\u0644\u062b\u0627\u0644\u062b\u0629',
-        cb('stage', '1'),
-      )
-      .row()
-      .text(
-        '\u0627\u0644\u0633\u0646\u0648\u0627\u062a \u0627\u0644\u0631\u0627\u0628\u0639\u0629\u2013\u0627\u0644\u0633\u0627\u062f\u0633\u0629',
-        cb('stage', '4'),
-      );
-  const edit = (ctx: Context, text: string, keyboard: InlineKeyboard) =>
-    ctx
-      .editMessageText(text, { reply_markup: keyboard })
-      .catch(() => ctx.reply(text, { reply_markup: keyboard }));
-  const stale = (ctx: Context) =>
-    edit(
-      ctx,
-      '\u0647\u0630\u0627 \u0627\u0644\u062e\u064a\u0627\u0631 \u0644\u0645 \u064a\u0639\u062f \u0645\u062a\u0627\u062d\u0627\u064b.',
-      home(),
-    );
-  const identify = async (ctx: Context) => {
+
+  const identify = async (ctx: Context): Promise<Identity> => {
     if (!ctx.from) throw new Error('Telegram user context is missing');
     const student = await prisma.student.upsert({
       where: { telegramUserId: BigInt(ctx.from.id) },
@@ -65,269 +78,339 @@ export function createMedicalBot({ token, prisma }: Options) {
     });
     return { student, membership };
   };
-  bot.command('start', async (ctx) => {
-    await identify(ctx);
+
+  const reset = (membershipId: string) =>
+    prisma.studentBotMembership.update({
+      where: { id: membershipId },
+      data: {
+        navigationLevel: 'STAGE',
+        navigationStage: null,
+        navigationYearId: null,
+        navigationSemesterId: null,
+        navigationCourseId: null,
+        navigationSectionId: null,
+      },
+    });
+
+  const optionsFor = async (membership: Membership): Promise<MenuOption[]> => {
+    switch (membership.navigationLevel as NavigationLevel) {
+      case 'STAGE':
+        return STAGES.map(({ id, label }) => ({ id: String(id), label }));
+      case 'YEAR': {
+        if (!membership.navigationStage) return [];
+        const rows = await prisma.academicYear.findMany({
+          where: {
+            number: { gte: membership.navigationStage, lte: membership.navigationStage + 2 },
+            isActive: true,
+            archivedAt: null,
+            botVisibility: { some: { bot: { key: 'medical-main', status: 'ACTIVE' } } },
+          },
+          orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+        });
+        return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
+      }
+      case 'SEMESTER': {
+        if (!membership.navigationYearId) return [];
+        const rows = await prisma.semester.findMany({
+          where: {
+            academicYearId: membership.navigationYearId,
+            isActive: true,
+            archivedAt: null,
+            academicYear: {
+              isActive: true,
+              archivedAt: null,
+              botVisibility: { some: { bot: { key: 'medical-main', status: 'ACTIVE' } } },
+            },
+          },
+          orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+        });
+        return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
+      }
+      case 'COURSE': {
+        if (!membership.navigationSemesterId) return [];
+        const rows = await prisma.course.findMany({
+          where: {
+            semesterId: membership.navigationSemesterId,
+            isActive: true,
+            archivedAt: null,
+            semester: { isActive: true, archivedAt: null },
+          },
+          orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+        });
+        return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
+      }
+      case 'SECTION': {
+        if (!membership.navigationCourseId) return [];
+        const rows = await prisma.section.findMany({
+          where: {
+            courseId: membership.navigationCourseId,
+            isActive: true,
+            archivedAt: null,
+            course: { isActive: true, archivedAt: null },
+          },
+          orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+        });
+        return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
+      }
+      case 'CONTENT': {
+        if (!membership.navigationSectionId) return [];
+        const rows = await prisma.contentItem.findMany({
+          where: {
+            ...publishedContentWhere(membership.navigationSectionId),
+            section: { isActive: true, archivedAt: null },
+          },
+          orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+        });
+        return visibleOptions(rows.map((row) => ({ id: row.id, label: row.titleAr })));
+      }
+    }
+  };
+
+  const showMenu = async (ctx: Context, membership: Membership, prefix?: string) => {
+    const level = membership.navigationLevel as NavigationLevel;
+    const options = await optionsFor(membership);
+    const keyboard = level === 'STAGE' ? stageKeyboard() : navigationKeyboard(options);
+    const prompt = promptFor(level, options.length > 0);
     await ctx.reply(
-      '\u0623\u0647\u0644\u0627\u064b \u0628\u0643 \u0641\u064a \u0645\u0646\u0635\u0629 \u0627\u0644\u062a\u0639\u0644\u064a\u0645 \u0627\u0644\u0637\u0628\u064a. \u0627\u062e\u062a\u0631 \u0627\u0644\u0645\u0631\u062d\u0644\u0629:',
-      { reply_markup: home() },
+      prefix
+        ? `${prefix}
+${prompt}`
+        : prompt,
+      { reply_markup: keyboard },
     );
+  };
+
+  const goHome = async (ctx: Context, membershipId: string) => {
+    const membership = await reset(membershipId);
+    await showMenu(ctx, membership);
+  };
+
+  const goBack = async (ctx: Context, membership: Membership) => {
+    const level = membership.navigationLevel as NavigationLevel;
+    if (level === 'STAGE' || level === 'YEAR') return goHome(ctx, membership.id);
+    const data: Record<string, unknown> = { navigationLevel: previousLevel(level) };
+    if (level === 'SEMESTER') {
+      data.navigationYearId = null;
+      data.navigationSemesterId = null;
+      data.navigationCourseId = null;
+      data.navigationSectionId = null;
+    } else if (level === 'COURSE') {
+      data.navigationSemesterId = null;
+      data.navigationCourseId = null;
+      data.navigationSectionId = null;
+    } else if (level === 'SECTION') {
+      data.navigationCourseId = null;
+      data.navigationSectionId = null;
+    } else {
+      data.navigationSectionId = null;
+    }
+    const updated = await prisma.studentBotMembership.update({
+      where: { id: membership.id },
+      data,
+    });
+    await showMenu(ctx, updated);
+  };
+
+  bot.command('start', async (ctx) => {
+    const { membership } = await identify(ctx);
+    const fresh = await reset(membership.id);
+    await showMenu(ctx, fresh, 'أهلاً بك في منصة التعليم الطبي.');
   });
-  bot.command('menu', (ctx) =>
-    ctx.reply(
-      '\u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629:',
-      { reply_markup: home() },
-    ),
-  );
-  bot.on('callback_query:data', async (ctx) => {
-    const data = parseCallbackData(ctx.callbackQuery.data);
-    if (!data)
-      return ctx.answerCallbackQuery({
-        text: '\u0647\u0630\u0627 \u0627\u0644\u062e\u064a\u0627\u0631 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d \u0623\u0648 \u0642\u062f\u064a\u0645.',
-      });
-    await ctx.answerCallbackQuery();
+
+  bot.command('menu', async (ctx) => {
+    const { membership } = await identify(ctx);
+    await goHome(ctx, membership.id);
+  });
+
+  bot.on('message:text', async (ctx) => {
+    const text = ctx.message.text.trim();
     const { student, membership } = await identify(ctx);
-    if (data.action === 'home')
-      return edit(
-        ctx,
-        '\u0627\u062e\u062a\u0631 \u0627\u0644\u0645\u0631\u062d\u0644\u0629:',
-        home(),
-      );
-    if (data.action === 'stage') {
-      const n = Number(data.id);
-      const rows = await prisma.academicYear.findMany({
+    if (text === HOME_TEXT) return goHome(ctx, membership.id);
+    if (text === BACK_TEXT) return goBack(ctx, membership);
+
+    const options = await optionsFor(membership);
+    const selected = resolveVisibleOption(text, options);
+    if (!selected) {
+      return showMenu(ctx, membership, 'هذا الخيار غير متاح. اختر من القائمة الحالية.');
+    }
+
+    const level = membership.navigationLevel as NavigationLevel;
+    if (level === 'STAGE') {
+      const stage = Number(selected.id);
+      const updated = await prisma.studentBotMembership.update({
+        where: { id: membership.id },
+        data: {
+          navigationLevel: 'YEAR',
+          navigationStage: stage,
+          navigationYearId: null,
+          navigationSemesterId: null,
+          navigationCourseId: null,
+          navigationSectionId: null,
+        },
+      });
+      return showMenu(ctx, updated);
+    }
+    if (level === 'YEAR') {
+      const year = await prisma.academicYear.findFirst({
         where: {
-          number: { gte: n, lte: n + 2 },
+          id: selected.id,
+          number: { gte: membership.navigationStage!, lte: membership.navigationStage! + 2 },
           isActive: true,
           archivedAt: null,
           botVisibility: { some: { bot: { key: 'medical-main', status: 'ACTIVE' } } },
         },
-        orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
       });
-      const k = new InlineKeyboard();
-      rows.forEach((r) => k.text(r.nameAr, cb('year', r.id)).row());
-      k.text(
-        '\u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629',
-        cb('home'),
-      );
-      return edit(
-        ctx,
-        rows.length
-          ? '\u0627\u062e\u062a\u0631 \u0627\u0644\u0633\u0646\u0629 \u0627\u0644\u062f\u0631\u0627\u0633\u064a\u0629:'
-          : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0633\u0646\u0648\u0627\u062a \u0645\u062a\u0627\u062d\u0629 \u062d\u0627\u0644\u064a\u0627\u064b.',
-        k,
-      );
-    }
-    if (data.action === 'year') {
-      const row = await prisma.academicYear.findFirst({
-        where: { id: data.id, isActive: true, archivedAt: null },
-      });
-      if (!row) return stale(ctx);
+      if (!year) return showMenu(ctx, membership, 'هذا الخيار لم يعد متاحاً.');
       await prisma.student.update({
         where: { id: student.id },
-        data: { selectedAcademicYearId: row.id },
+        data: { selectedAcademicYearId: year.id },
       });
-      const rows = await prisma.semester.findMany({
-        where: { academicYearId: row.id, isActive: true, archivedAt: null },
-        orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+      const updated = await prisma.studentBotMembership.update({
+        where: { id: membership.id },
+        data: { navigationLevel: 'SEMESTER', navigationYearId: year.id },
       });
-      const k = new InlineKeyboard();
-      rows.forEach((r) => k.text(r.nameAr, cb('semester', r.id)).row());
-      k.text('\u0631\u062c\u0648\u0639', cb('stage', row.number <= 3 ? '1' : '4')).text(
-        '\u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629',
-        cb('home'),
-      );
-      return edit(
-        ctx,
-        rows.length
-          ? '\u0627\u062e\u062a\u0631 \u0627\u0644\u0641\u0635\u0644 \u0627\u0644\u062f\u0631\u0627\u0633\u064a:'
-          : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0641\u0635\u0648\u0644 \u0645\u062a\u0627\u062d\u0629 \u062d\u0627\u0644\u064a\u0627\u064b.',
-        k,
-      );
+      return showMenu(ctx, updated);
     }
-    if (data.action === 'semester') {
-      const row = await prisma.semester.findFirst({
-        where: { id: data.id, isActive: true, archivedAt: null },
-      });
-      if (!row) return stale(ctx);
-      const rows = await prisma.course.findMany({
-        where: { semesterId: row.id, isActive: true, archivedAt: null },
-        orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
-      });
-      const k = new InlineKeyboard();
-      rows.forEach((r) => k.text(r.nameAr, cb('course', r.id)).row());
-      k.text('\u0631\u062c\u0648\u0639', cb('year', row.academicYearId)).text(
-        '\u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629',
-        cb('home'),
-      );
-      return edit(
-        ctx,
-        rows.length
-          ? '\u0627\u062e\u062a\u0631 \u0627\u0644\u0645\u0627\u062f\u0629:'
-          : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0645\u0648\u0627\u062f \u0645\u062a\u0627\u062d\u0629 \u062d\u0627\u0644\u064a\u0627\u064b.',
-        k,
-      );
-    }
-    if (data.action === 'course') {
-      const row = await prisma.course.findFirst({
-        where: { id: data.id, isActive: true, archivedAt: null },
-      });
-      if (!row) return stale(ctx);
-      const rows = await prisma.section.findMany({
-        where: { courseId: row.id, isActive: true, archivedAt: null },
-        orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
-      });
-      const k = new InlineKeyboard();
-      rows.forEach((r) => k.text(r.nameAr, cb('section', r.id)).row());
-      k.text('\u0631\u062c\u0648\u0639', cb('semester', row.semesterId)).text(
-        '\u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629',
-        cb('home'),
-      );
-      return edit(
-        ctx,
-        rows.length
-          ? '\u0627\u062e\u062a\u0631 \u0627\u0644\u0642\u0633\u0645:'
-          : '\u0644\u0627 \u062a\u0648\u062c\u062f \u0623\u0642\u0633\u0627\u0645 \u0645\u062a\u0627\u062d\u0629 \u062d\u0627\u0644\u064a\u0627\u064b.',
-        k,
-      );
-    }
-    if (data.action === 'section') {
-      const row = await prisma.section.findFirst({
-        where: { id: data.id, isActive: true, archivedAt: null },
-      });
-      if (!row) return stale(ctx);
-      const where = publishedContentWhere(row.id);
-      const [rows, total] = await Promise.all([
-        prisma.contentItem.findMany({
-          where,
-          skip: data.page * PAGE_SIZE,
-          take: PAGE_SIZE,
-          orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
-        }),
-        prisma.contentItem.count({ where }),
-      ]);
-      const k = new InlineKeyboard();
-      rows.forEach((r) => k.text(r.titleAr, cb('content', r.id)).row());
-      if (data.page)
-        k.text('\u0627\u0644\u0633\u0627\u0628\u0642', cb('section', row.id, data.page - 1));
-      if ((data.page + 1) * PAGE_SIZE < total)
-        k.text('\u0627\u0644\u062a\u0627\u0644\u064a', cb('section', row.id, data.page + 1));
-      k.row()
-        .text('\u0631\u062c\u0648\u0639', cb('course', row.courseId))
-        .text(
-          '\u0627\u0644\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629',
-          cb('home'),
-        );
-      return edit(
-        ctx,
-        rows.length
-          ? '\u0627\u062e\u062a\u0631 \u0627\u0644\u0645\u062d\u062a\u0648\u0649:'
-          : '\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u062d\u062a\u0648\u0649 \u0645\u0646\u0634\u0648\u0631 \u0641\u064a \u0647\u0630\u0627 \u0627\u0644\u0642\u0633\u0645.',
-        k,
-      );
-    }
-    if (data.action === 'content') {
-      const item = await prisma.contentItem.findFirst({
-        where: { id: data.id, state: 'PUBLISHED', isActive: true, archivedAt: null },
-        include: { attachments: true },
-      });
-      if (!item) return stale(ctx);
-      if (item.contentType === 'TEXT')
-        await ctx.reply(item.bodyText ?? item.descriptionAr ?? item.titleAr);
-      if (item.contentType === 'LINK') {
-        const url = item.attachments.find((a) => a.storageProvider === 'EXTERNAL_URL')?.externalUrl;
-        await ctx.reply(
-          url
-            ? item.titleAr
-            : '\u0627\u0644\u0631\u0627\u0628\u0637 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d \u062d\u0627\u0644\u064a\u0627\u064b.',
-          url
-            ? {
-                reply_markup: new InlineKeyboard().url(
-                  '\u0641\u062a\u062d \u0627\u0644\u0631\u0627\u0628\u0637',
-                  url,
-                ),
-              }
-            : undefined,
-        );
-      }
-      if (item.contentType === 'FILE') {
-        const a = item.attachments[0];
-        let source: string | InputFile | null = a?.telegramFileId ?? null;
-        if (!source && a?.storedPath) {
-          const path = resolve(a.storedPath);
-          source = existsSync(path)
-            ? new InputFile(createReadStream(path), a.originalFilename)
-            : null;
-        }
-        if (!source)
-          await ctx.reply(
-            '\u0627\u0644\u0645\u0644\u0641 \u063a\u064a\u0631 \u0645\u062a\u0627\u062d \u062d\u0627\u0644\u064a\u0627\u064b.',
-          );
-        else {
-          const msg = await ctx.replyWithDocument(source, {
-            caption: item.titleAr,
-            reply_markup: new InlineKeyboard().text(
-              '\u0627\u0644\u0625\u0628\u0644\u0627\u063a \u0639\u0646 \u0645\u0644\u0641 \u062a\u0627\u0644\u0641',
-              cb('report', item.id),
-            ),
-          });
-          if (a && !a.telegramFileId && msg.document?.file_id)
-            await prisma.contentAttachment.update({
-              where: { id: a.id },
-              data: { telegramFileId: msg.document.file_id },
-            });
-        }
-      }
-      await prisma.contentAccessEvent.create({
-        data: {
-          studentId: student.id,
-          contentItemId: item.id,
-          botMembershipId: membership.id,
-          eventType:
-            item.contentType === 'LINK'
-              ? 'OPEN_LINK'
-              : item.contentType === 'FILE'
-                ? 'DOWNLOAD_REQUEST'
-                : 'VIEW',
-        },
-      });
-      return;
-    }
-    if (data.action === 'report') {
-      const item = await prisma.contentItem.findFirst({
-        where: { id: data.id, contentType: 'FILE', state: 'PUBLISHED', isActive: true },
-        include: { attachments: true },
-      });
-      if (!item)
-        return ctx.reply(
-          '\u062a\u0639\u0630\u0631 \u0627\u0644\u0639\u062b\u0648\u0631 \u0639\u0644\u0649 \u0627\u0644\u0645\u0644\u0641.',
-        );
-      const recent = await prisma.brokenFileReport.findFirst({
+    if (level === 'SEMESTER') {
+      const semester = await prisma.semester.findFirst({
         where: {
-          studentId: student.id,
-          contentItemId: item.id,
-          createdAt: { gte: brokenReportSince() },
+          id: selected.id,
+          academicYearId: membership.navigationYearId!,
+          isActive: true,
+          archivedAt: null,
         },
       });
-      if (recent)
-        return ctx.reply(
-          '\u062a\u0645 \u0627\u0633\u062a\u0644\u0627\u0645 \u0628\u0644\u0627\u063a\u0643 \u0645\u0633\u0628\u0642\u0627\u064b\u060c \u0634\u0643\u0631\u0627\u064b \u0644\u0643.',
-        );
-      await prisma.brokenFileReport.create({
-        data: {
-          studentId: student.id,
-          contentItemId: item.id,
-          attachmentId: item.attachments[0]?.id,
-          reasonCategory: 'BROKEN_FILE',
-        },
+      if (!semester) return showMenu(ctx, membership, 'هذا الخيار لم يعد متاحاً.');
+      const updated = await prisma.studentBotMembership.update({
+        where: { id: membership.id },
+        data: { navigationLevel: 'COURSE', navigationSemesterId: semester.id },
       });
-      return ctx.reply(
-        '\u062a\u0645 \u0625\u0631\u0633\u0627\u0644 \u0627\u0644\u0628\u0644\u0627\u063a \u0628\u0646\u062c\u0627\u062d. \u0634\u0643\u0631\u0627\u064b \u0644\u0645\u0633\u0627\u0639\u062f\u062a\u0646\u0627.',
-      );
+      return showMenu(ctx, updated);
     }
-    return ctx.reply(
-      '\u0647\u0630\u0627 \u0627\u0644\u062e\u064a\u0627\u0631 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d \u0623\u0648 \u0642\u062f\u064a\u0645.',
-    );
+    if (level === 'COURSE') {
+      const course = await prisma.course.findFirst({
+        where: {
+          id: selected.id,
+          semesterId: membership.navigationSemesterId!,
+          isActive: true,
+          archivedAt: null,
+        },
+      });
+      if (!course) return showMenu(ctx, membership, 'هذا الخيار لم يعد متاحاً.');
+      const updated = await prisma.studentBotMembership.update({
+        where: { id: membership.id },
+        data: { navigationLevel: 'SECTION', navigationCourseId: course.id },
+      });
+      return showMenu(ctx, updated);
+    }
+    if (level === 'SECTION') {
+      const section = await prisma.section.findFirst({
+        where: {
+          id: selected.id,
+          courseId: membership.navigationCourseId!,
+          isActive: true,
+          archivedAt: null,
+        },
+      });
+      if (!section) return showMenu(ctx, membership, 'هذا الخيار لم يعد متاحاً.');
+      const updated = await prisma.studentBotMembership.update({
+        where: { id: membership.id },
+        data: { navigationLevel: 'CONTENT', navigationSectionId: section.id },
+      });
+      return showMenu(ctx, updated);
+    }
+
+    const item = await prisma.contentItem.findFirst({
+      where: {
+        id: selected.id,
+        ...publishedContentWhere(membership.navigationSectionId!),
+      },
+      include: { attachments: true },
+    });
+    if (!item) return showMenu(ctx, membership, 'هذا المحتوى لم يعد متاحاً.');
+
+    if (item.contentType === 'TEXT')
+      await ctx.reply(item.bodyText ?? item.descriptionAr ?? item.titleAr);
+    if (item.contentType === 'LINK') {
+      const url = item.attachments.find(
+        (attachment) => attachment.storageProvider === 'EXTERNAL_URL',
+      )?.externalUrl;
+      await ctx.reply(url ? item.titleAr : 'الرابط غير متاح حالياً.', {
+        reply_markup: url ? externalUrlKeyboard(url) : undefined,
+      });
+    }
+    if (item.contentType === 'FILE') {
+      const attachment = item.attachments[0];
+      let source: string | InputFile | null = attachment?.telegramFileId ?? null;
+      if (!source && attachment?.storedPath) {
+        const path = resolve(attachment.storedPath);
+        source = existsSync(path)
+          ? new InputFile(createReadStream(path), attachment.originalFilename)
+          : null;
+      }
+      if (!source) await ctx.reply('الملف غير متاح حالياً.');
+      else {
+        const message = await ctx.replyWithDocument(source, {
+          caption: item.titleAr,
+          reply_markup: brokenReportKeyboard(item.id),
+        });
+        if (attachment && !attachment.telegramFileId && message.document?.file_id)
+          await prisma.contentAttachment.update({
+            where: { id: attachment.id },
+            data: { telegramFileId: message.document.file_id },
+          });
+      }
+    }
+    await prisma.contentAccessEvent.create({
+      data: {
+        studentId: student.id,
+        contentItemId: item.id,
+        botMembershipId: membership.id,
+        eventType:
+          item.contentType === 'LINK'
+            ? 'OPEN_LINK'
+            : item.contentType === 'FILE'
+              ? 'DOWNLOAD_REQUEST'
+              : 'VIEW',
+      },
+    });
   });
+
+  bot.on('callback_query:data', async (ctx) => {
+    const data = parseCallbackData(ctx.callbackQuery.data);
+    if (!data) return ctx.answerCallbackQuery({ text: 'هذا الإجراء غير صالح أو قديم.' });
+    await ctx.answerCallbackQuery();
+    const { student } = await identify(ctx);
+    const item = await prisma.contentItem.findFirst({
+      where: {
+        id: data.id,
+        contentType: 'FILE',
+        state: 'PUBLISHED',
+        isActive: true,
+        archivedAt: null,
+      },
+      include: { attachments: true },
+    });
+    if (!item) return ctx.reply('تعذر العثور على الملف.');
+    const recent = await prisma.brokenFileReport.findFirst({
+      where: {
+        studentId: student.id,
+        contentItemId: item.id,
+        createdAt: { gte: brokenReportSince() },
+      },
+    });
+    if (recent) return ctx.reply('تم استلام بلاغك مسبقاً، شكراً لك.');
+    await prisma.brokenFileReport.create({
+      data: {
+        studentId: student.id,
+        contentItemId: item.id,
+        attachmentId: item.attachments[0]?.id,
+        reasonCategory: 'BROKEN_FILE',
+      },
+    });
+    return ctx.reply('تم إرسال البلاغ بنجاح. شكراً لمساعدتنا.');
+  });
+
   bot.catch((error) =>
     console.error({
       updateId: error.ctx.update.update_id,
