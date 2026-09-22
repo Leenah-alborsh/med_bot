@@ -2,12 +2,13 @@ services:
   - type: web
     name: med-bot-api
     runtime: node
+    repo: https://github.com/Leenah-alborsh/med_bot
     plan: free
     region: frankfurt
     branch: master
     autoDeployTrigger: commit
     healthCheckPath: /api/v1/health
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/api build
+    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/api build
     startCommand: pnpm --filter @medical/api start
     envVars:
       - key: NODE_VERSION
@@ -32,13 +33,14 @@ services:
   - type: worker
     name: med-bot-worker
     runtime: node
+    repo: https://github.com/Leenah-alborsh/med_bot
     plan: starter
     region: frankfurt
     branch: master
     autoDeployTrigger: commit
     numInstances: 1
     maxShutdownDelaySeconds: 60
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/bot-worker build
+    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/bot-worker build
     startCommand: pnpm --filter @medical/bot-worker start
     envVars:
       - key: NODE_VERSION
