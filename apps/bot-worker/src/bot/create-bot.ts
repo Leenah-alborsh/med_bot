@@ -4,6 +4,7 @@ import type { PrismaClient } from '@medical/database';
 import { Bot, InlineKeyboard, InputFile, type Context } from 'grammy';
 import {
   BACK_TEXT,
+  CONTENT_TYPES,
   HOME_TEXT,
   STAGES,
   navigationKeyboard,
@@ -51,6 +52,7 @@ const promptFor = (level: NavigationLevel, hasOptions: boolean) => {
     SEMESTER: 'اختر الفصل الدراسي:',
     COURSE: 'اختر المادة:',
     SECTION: 'اختر القسم:',
+    CONTENT_TYPE: 'اختر نوع المحتوى:',
     CONTENT: 'اختر المحتوى:',
   }[level];
 };
@@ -94,6 +96,7 @@ export function createMedicalBot({ token, prisma, allowLocalFiles = true }: Opti
         navigationSemesterId: null,
         navigationCourseId: null,
         navigationSectionId: null,
+        navigationContentType: null,
       },
     });
 
@@ -157,11 +160,25 @@ export function createMedicalBot({ token, prisma, allowLocalFiles = true }: Opti
         });
         return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
       }
-      case 'CONTENT': {
+      case 'CONTENT_TYPE': {
         if (!membership.navigationSectionId) return [];
+        const rows = await prisma.contentItem.findMany({
+          where: publishedContentWhere(membership.navigationSectionId),
+          select: { contentType: true },
+          distinct: ['contentType'],
+        });
+        const available = new Set(rows.map((row) => row.contentType));
+        return CONTENT_TYPES.filter((type) => available.has(type.id)).map((type) => ({
+          id: type.id,
+          label: type.label,
+        }));
+      }
+      case 'CONTENT': {
+        if (!membership.navigationSectionId || !membership.navigationContentType) return [];
         const rows = await prisma.contentItem.findMany({
           where: {
             ...publishedContentWhere(membership.navigationSectionId),
+            contentType: membership.navigationContentType as 'TEXT' | 'LINK' | 'FILE',
             section: { isActive: true, archivedAt: null },
           },
           orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
@@ -206,8 +223,12 @@ ${prompt}`
     } else if (level === 'SECTION') {
       data.navigationCourseId = null;
       data.navigationSectionId = null;
-    } else {
+      data.navigationContentType = null;
+    } else if (level === 'CONTENT_TYPE') {
       data.navigationSectionId = null;
+      data.navigationContentType = null;
+    } else {
+      data.navigationContentType = null;
     }
     const updated = await prisma.studentBotMembership.update({
       where: { id: membership.id },
@@ -251,6 +272,7 @@ ${prompt}`
           navigationSemesterId: null,
           navigationCourseId: null,
           navigationSectionId: null,
+          navigationContentType: null,
         },
       });
       return showMenu(ctx, updated);
@@ -320,7 +342,27 @@ ${prompt}`
       if (!section) return showMenu(ctx, membership, 'هذا الخيار لم يعد متاحاً.');
       const updated = await prisma.studentBotMembership.update({
         where: { id: membership.id },
-        data: { navigationLevel: 'CONTENT', navigationSectionId: section.id },
+        data: {
+          navigationLevel: 'CONTENT_TYPE',
+          navigationSectionId: section.id,
+          navigationContentType: null,
+        },
+      });
+      return showMenu(ctx, updated);
+    }
+    if (level === 'CONTENT_TYPE') {
+      const contentType = selected.id as 'TEXT' | 'LINK' | 'FILE';
+      const exists = await prisma.contentItem.findFirst({
+        where: {
+          ...publishedContentWhere(membership.navigationSectionId!),
+          contentType,
+        },
+        select: { id: true },
+      });
+      if (!exists) return showMenu(ctx, membership, 'هذا النوع لم يعد متاحاً.');
+      const updated = await prisma.studentBotMembership.update({
+        where: { id: membership.id },
+        data: { navigationLevel: 'CONTENT', navigationContentType: contentType },
       });
       return showMenu(ctx, updated);
     }
@@ -329,6 +371,7 @@ ${prompt}`
       where: {
         id: selected.id,
         ...publishedContentWhere(membership.navigationSectionId!),
+        contentType: membership.navigationContentType as 'TEXT' | 'LINK' | 'FILE',
       },
       include: { attachments: { where: { isCurrent: true }, orderBy: { version: 'desc' } } },
     });

@@ -104,23 +104,24 @@ model Student {
 }
 
 model StudentBotMembership {
-  id                   String               @id @default(uuid()) @db.Uuid
-  studentId            String               @db.Uuid
-  botId                String               @db.Uuid
-  firstSeenAt          DateTime             @default(now())
-  lastInteraction      DateTime             @default(now())
-  isBlocked            Boolean              @default(false)
-  navigationLevel      String               @default("STAGE")
-  navigationStage      Int?
-  navigationYearId     String?              @db.Uuid
-  navigationSemesterId String?              @db.Uuid
-  navigationCourseId   String?              @db.Uuid
-  navigationSectionId  String?              @db.Uuid
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
-  student              Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  bot                  Bot                  @relation(fields: [botId], references: [id], onDelete: Cascade)
-  accessEvents         ContentAccessEvent[]
+  id                    String               @id @default(uuid()) @db.Uuid
+  studentId             String               @db.Uuid
+  botId                 String               @db.Uuid
+  firstSeenAt           DateTime             @default(now())
+  lastInteraction       DateTime             @default(now())
+  isBlocked             Boolean              @default(false)
+  navigationLevel       String               @default("STAGE")
+  navigationStage       Int?
+  navigationYearId      String?              @db.Uuid
+  navigationSemesterId  String?              @db.Uuid
+  navigationCourseId    String?              @db.Uuid
+  navigationSectionId   String?              @db.Uuid
+  navigationContentType String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  student               Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  bot                   Bot                  @relation(fields: [botId], references: [id], onDelete: Cascade)
+  accessEvents          ContentAccessEvent[]
 
   @@unique([studentId, botId])
   @@index([botId, isBlocked])

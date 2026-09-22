@@ -9,6 +9,7 @@ import {
 } from '../src/bot/create-bot.js';
 import {
   BACK_TEXT,
+  CONTENT_TYPES,
   HOME_TEXT,
   navigationKeyboard,
   previousLevel,
@@ -66,8 +67,17 @@ describe('Telegram reply-keyboard navigation', () => {
     expect(resolveVisibleOption('التشريح', options)).toBeNull();
   });
 
+  it('offers Arabic content-type choices before content', () => {
+    expect(CONTENT_TYPES).toEqual([
+      { id: 'FILE', label: 'ملفات' },
+      { id: 'LINK', label: 'روابط' },
+      { id: 'TEXT', label: 'نصوص' },
+    ]);
+  });
+
   it('moves back exactly one level and main-menu resets to stage', () => {
-    expect(previousLevel('CONTENT')).toBe('SECTION');
+    expect(previousLevel('CONTENT')).toBe('CONTENT_TYPE');
+    expect(previousLevel('CONTENT_TYPE')).toBe('SECTION');
     expect(previousLevel('SECTION')).toBe('COURSE');
     expect(previousLevel('COURSE')).toBe('SEMESTER');
     expect(previousLevel('SEMESTER')).toBe('YEAR');
@@ -87,6 +97,7 @@ describe('Telegram reply-keyboard navigation', () => {
       'navigationSemesterId',
       'navigationCourseId',
       'navigationSectionId',
+      'navigationContentType',
     ]) {
       expect(schema).toContain(field);
     }
