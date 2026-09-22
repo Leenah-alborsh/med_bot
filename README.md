@@ -101,7 +101,10 @@ Only callers with the reserved `audit.read` permission can access administrator 
 
 Required or configurable values are documented in `.env.example`:
 
-- `DATABASE_URL`
+- `DATABASE_URL`: pooled application runtime connection (Neon in the current local configuration).
+- `NEON_DATABASE_URL`: retained pooled Neon connection.
+- `NEON_DIRECT_URL`: direct connection used by Prisma migrations.
+- `LOCAL_DATABASE_URL`: retained local PostgreSQL connection for backup access.
 - `API_PORT`, `API_PREFIX`, `API_CORS_ORIGIN`
 - `ADMIN_SESSION_TTL_SECONDS`
 - `NEXT_PUBLIC_API_BASE_URL` for public API configuration
@@ -118,6 +121,7 @@ Phase 3 migrations:
 
 - `20260921163035_phase_3_single_bot_enum`
 - `20260921163036_phase_3_single_bot_content`
+- `20260922090000_reply_keyboard_navigation`
 
 ## Catalog, content, and file storage
 
@@ -139,7 +143,7 @@ Set `MEDICAL_BOT_TOKEN` privately in `.env`, enable `BOT_WORKER_ENABLED`, and ru
 pnpm --filter @medical/bot-worker dev
 ```
 
-The worker validates the token using `getMe`, logs only the safe bot ID/username, acquires a PostgreSQL advisory lock to prevent duplicate polling, and starts long polling. Student navigation is stage, year, semester, course, section, then published content. The worker persists selected year, access events, and duplicate-limited broken-file reports.
+The worker validates the token using `getMe`, logs only the safe bot ID/username, acquires a PostgreSQL advisory lock to prevent duplicate polling, and starts long polling. Student navigation uses a persistent Arabic Telegram Reply Keyboard for stage, year, semester, course, section, then published content. The worker persists the full navigation path, selected year, access events, and duplicate-limited broken-file reports. URL and broken-file actions remain identity-bearing inline buttons.
 
 ```bash
 pnpm db:format

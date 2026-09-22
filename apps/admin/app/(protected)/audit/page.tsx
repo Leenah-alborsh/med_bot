@@ -8,14 +8,13 @@ type Log = {
   actor?: { displayNameAr: string; email: string };
 };
 const t = {
-  eyebrow:
-    '\u0627\u0644\u0634\u0641\u0627\u0641\u064a\u0629 \u0648\u0627\u0644\u0631\u0642\u0627\u0628\u0629',
-  title: '\u0633\u062c\u0644 \u0627\u0644\u0639\u0645\u0644\u064a\u0627\u062a',
-  action: '\u0627\u0644\u0639\u0645\u0644\u064a\u0629',
-  actor: '\u0627\u0644\u0645\u0634\u0631\u0641',
-  target: '\u0627\u0644\u0639\u0646\u0635\u0631',
-  date: '\u0627\u0644\u062a\u0627\u0631\u064a\u062e',
-  system: '\u0627\u0644\u0646\u0638\u0627\u0645',
+  eyebrow: 'الشفافية والرقابة',
+  title: 'سجل العمليات',
+  action: 'العملية',
+  actor: 'المشرف',
+  target: 'العنصر',
+  date: 'التاريخ',
+  system: 'النظام',
 };
 export default async function Page() {
   const data = await serverApi<{ items: Log[] }>('audit?pageSize=100');

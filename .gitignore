@@ -11,3 +11,8 @@ pnpm-debug.log*
 *.tsbuildinfo
 var/uploads/
 Dockerfile.local
+backups/
+db-backups/
+*.dump
+*.backup
+*.sql.gz

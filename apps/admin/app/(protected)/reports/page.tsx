@@ -8,10 +8,9 @@ type Report = {
   attachment?: { originalFilename: string };
 };
 const text = {
-  eyebrow: '\u062c\u0648\u062f\u0629 \u0627\u0644\u0645\u062d\u062a\u0648\u0649',
-  title: '\u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0645\u0644\u0641\u0627\u062a',
-  subtitle:
-    '\u0631\u0627\u062c\u0639 \u0645\u0634\u0643\u0644\u0627\u062a \u0627\u0644\u0637\u0644\u0627\u0628 \u0648\u0648\u062b\u0651\u0642 \u0642\u0631\u0627\u0631 \u0627\u0644\u0645\u0639\u0627\u0644\u062c\u0629.',
+  eyebrow: 'جودة المحتوى',
+  title: 'بلاغات الملفات',
+  subtitle: 'راجع مشكلات الطلاب ووثّق قرار المعالجة.',
 };
 export default async function Page() {
   const data = await serverApi<{ items: Report[] }>('broken-file-reports?pageSize=100');

@@ -89,14 +89,14 @@ async function upsertBot() {
   const bot = await prisma.bot.upsert({
     where: { key: 'medical-main' },
     update: {
-      displayName: 'Medical Education Bot',
+      displayName: 'بوت طلاب الطب',
       groupType: 'ALL_YEARS',
       status: 'ACTIVE',
       tokenReference: 'MEDICAL_BOT_TOKEN',
     },
     create: {
       key: 'medical-main',
-      displayName: 'Medical Education Bot',
+      displayName: 'بوت طلاب الطب',
       groupType: 'ALL_YEARS',
       status: 'ACTIVE',
       tokenReference: 'MEDICAL_BOT_TOKEN',

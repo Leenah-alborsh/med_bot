@@ -9,13 +9,12 @@ type Option = { id: string; nameAr: string };
 type Kind = 'years' | 'semesters' | 'courses' | 'sections';
 const labels: Record<Kind, { title: string; singular: string }> = {
   years: {
-    title:
-      '\u0627\u0644\u0633\u0646\u0648\u0627\u062a \u0627\u0644\u062f\u0631\u0627\u0633\u064a\u0629',
-    singular: '\u0633\u0646\u0629 \u062f\u0631\u0627\u0633\u064a\u0629',
+    title: 'السنوات الدراسية',
+    singular: 'سنة دراسية',
   },
-  semesters: { title: '\u0627\u0644\u0641\u0635\u0648\u0644', singular: '\u0641\u0635\u0644' },
-  courses: { title: '\u0627\u0644\u0645\u0648\u0627\u062f', singular: '\u0645\u0627\u062f\u0629' },
-  sections: { title: '\u0627\u0644\u0623\u0642\u0633\u0627\u0645', singular: '\u0642\u0633\u0645' },
+  semesters: { title: 'الفصول', singular: 'فصل' },
+  courses: { title: 'المواد', singular: 'مادة' },
+  sections: { title: 'الأقسام', singular: 'قسم' },
 };
 export function CatalogManager({
   kind,
@@ -46,48 +45,28 @@ export function CatalogManager({
     try {
       await clientApi(`catalog/${kind}`, { method: 'POST', body: JSON.stringify(body) });
       form.reset();
-      setMessage('\u062a\u0645 \u0627\u0644\u062d\u0641\u0638 \u0628\u0646\u062c\u0627\u062d.');
+      setMessage('تم الحفظ بنجاح.');
       router.refresh();
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : '\u062a\u0639\u0630\u0631 \u0627\u0644\u062d\u0641\u0638.',
-      );
+      setMessage(error instanceof Error ? error.message : 'تعذر الحفظ.');
     }
   }
   async function archive(id: string) {
-    if (
-      !confirm(
-        '\u0647\u0644 \u062a\u0631\u064a\u062f \u0623\u0631\u0634\u0641\u0629 \u0647\u0630\u0627 \u0627\u0644\u0639\u0646\u0635\u0631\u061f',
-      )
-    )
-      return;
+    if (!confirm('هل تريد أرشفة هذا العنصر؟')) return;
     try {
       await clientApi(`catalog/${kind.slice(0, -1)}/${id}/archive`, { method: 'POST' });
       router.refresh();
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : '\u062a\u0639\u0630\u0631\u062a \u0627\u0644\u0623\u0631\u0634\u0641\u0629.',
-      );
+      setMessage(error instanceof Error ? error.message : 'تعذرت الأرشفة.');
     }
   }
   return (
     <main className="page">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">
-            \u0627\u0644\u0647\u064a\u0643\u0644
-            \u0627\u0644\u0623\u0643\u0627\u062f\u064a\u0645\u064a
-          </p>
+          <p className="eyebrow">الهيكل الأكاديمي</p>
           <h1>{labels[kind].title}</h1>
-          <p className="muted">
-            \u0625\u062f\u0627\u0631\u0629 \u0645\u0631\u062a\u0628\u0629
-            \u0648\u0622\u0645\u0646\u0629 \u0644\u0644\u0645\u0633\u0627\u0631
-            \u0627\u0644\u0630\u064a \u064a\u0638\u0647\u0631 \u0644\u0644\u0637\u0644\u0627\u0628.
-          </p>
+          <p className="muted">إدارة مرتبة وآمنة للمسار الذي يظهر للطلاب.</p>
         </div>
       </header>
       <section className="workspace-grid">
@@ -95,14 +74,12 @@ export function CatalogManager({
           <table>
             <thead>
               <tr>
-                <th>\u0627\u0644\u0627\u0633\u0645</th>
-                <th>English</th>
-                <th>\u0627\u0644\u062a\u0631\u062a\u064a\u0628</th>
-                <th>\u0627\u0644\u062d\u0627\u0644\u0629</th>
+                <th>الاسم</th>
+                <th>الاسم بالإنجليزية</th>
+                <th>الترتيب</th>
+                <th>الحالة</th>
                 <th>
-                  <span className="sr-only">
-                    \u0627\u0644\u0625\u062c\u0631\u0627\u0621\u0627\u062a
-                  </span>
+                  <span className="sr-only">الإجراءات</span>
                 </th>
               </tr>
             </thead>
@@ -116,13 +93,13 @@ export function CatalogManager({
                   <td>{item.displayOrder}</td>
                   <td>
                     <span className="badge" data-state={item.isActive ? 'active' : 'inactive'}>
-                      {item.isActive ? '\u0646\u0634\u0637' : '\u0645\u0624\u0631\u0634\u0641'}
+                      {item.isActive ? 'نشط' : 'مؤرشف'}
                     </span>
                   </td>
                   <td>
                     <button
                       className="icon-button danger"
-                      title="\u0623\u0631\u0634\u0641\u0629"
+                      title="أرشفة"
                       onClick={() => void archive(item.id)}
                       disabled={!item.isActive}
                     >
@@ -133,23 +110,18 @@ export function CatalogManager({
               ))}
             </tbody>
           </table>
-          {!items.length && (
-            <div className="empty-state">
-              \u0644\u0627 \u062a\u0648\u062c\u062f \u0639\u0646\u0627\u0635\u0631
-              \u062d\u062a\u0649 \u0627\u0644\u0622\u0646.
-            </div>
-          )}
+          {!items.length && <div className="empty-state">لا توجد عناصر حتى الآن.</div>}
         </div>
         <form className="editor-panel form" onSubmit={submit}>
           <div className="section-title">
             <Plus size={18} />
-            <h2>\u0625\u0636\u0627\u0641\u0629 {labels[kind].singular}</h2>
+            <h2>إضافة {labels[kind].singular}</h2>
           </div>
           {kind !== 'years' && (
             <label>
-              \u0627\u0644\u0639\u0646\u0635\u0631 \u0627\u0644\u0623\u0628
+              العنصر الأب
               <select name={parentKey} required>
-                <option value="">\u0627\u062e\u062a\u0631</option>
+                <option value="">اختر</option>
                 {parents.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nameAr}
@@ -160,21 +132,20 @@ export function CatalogManager({
           )}
           {kind === 'years' && (
             <label>
-              \u0631\u0642\u0645 \u0627\u0644\u0633\u0646\u0629
+              رقم السنة
               <input name="number" type="number" min="1" required />
             </label>
           )}
           <label>
-            \u0627\u0644\u0627\u0633\u0645 \u0628\u0627\u0644\u0639\u0631\u0628\u064a\u0629
+            الاسم بالعربية
             <input name="nameAr" required />
           </label>
           <label>
-            \u0627\u0644\u0627\u0633\u0645
-            \u0628\u0627\u0644\u0625\u0646\u062c\u0644\u064a\u0632\u064a\u0629
+            الاسم بالإنجليزية
             <input name="nameEn" dir="ltr" required />
           </label>
           <label>
-            \u062a\u0631\u062a\u064a\u0628 \u0627\u0644\u0639\u0631\u0636
+            ترتيب العرض
             <input name="displayOrder" type="number" min="0" required />
           </label>
           {message && (
@@ -184,7 +155,7 @@ export function CatalogManager({
           )}
           <button className="primary" type="submit">
             <Plus size={17} />
-            \u062d\u0641\u0638
+            حفظ
           </button>
         </form>
       </section>

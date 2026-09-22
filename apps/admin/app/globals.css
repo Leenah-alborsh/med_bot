@@ -692,3 +692,43 @@ code {
     align-items: stretch;
   }
 }
+
+/* Keep RTL workspaces within the content column at every viewport. */
+.content-shell,
+.page,
+.workspace-grid,
+.workspace-grid > *,
+.two-column,
+.two-column > * {
+  min-width: 0;
+}
+
+.content-shell {
+  overflow-x: clip;
+}
+
+.editor-panel.form {
+  width: 100%;
+  max-width: none;
+}
+
+.table-wrap {
+  width: 100%;
+  max-width: 100%;
+}
+
+.form label,
+.section-title,
+.page-heading {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) and (min-width: 981px) {
+  .workspace-grid {
+    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.9fr);
+  }
+
+  .page {
+    padding-inline: 24px;
+  }
+}

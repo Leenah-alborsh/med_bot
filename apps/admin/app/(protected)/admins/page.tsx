@@ -3,6 +3,11 @@ import { redirect } from 'next/navigation';
 import { getCurrentAdmin, hasPermission, serverApi } from '../../../src/lib/server-api';
 import { AdminCreateForm } from '../../../src/components/admin-create-form';
 
+const statusLabels: Record<string, string> = {
+  ACTIVE: 'نشط',
+  PENDING: 'بانتظار التفعيل',
+  DISABLED: 'معطل',
+};
 interface AdminRow {
   id: string;
   email: string;
@@ -65,7 +70,7 @@ export default async function AdminsPage({
                   <strong>{item.displayNameAr}</strong>
                   <span className="table-subtitle">{item.email}</span>
                 </td>
-                <td>{item.status}</td>
+                <td>{statusLabels[item.status] ?? item.status}</td>
                 <td>{item.roles.map((role) => role.nameAr).join('، ') || 'بدون دور'}</td>
                 <td>
                   <Link className="link" href={`/admins/${item.id}`}>

@@ -20,64 +20,61 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const nav = [
     {
       href: '/dashboard',
-      label: '\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629',
+      label: 'الرئيسية',
       icon: LayoutDashboard,
       show: true,
     },
     {
       href: '/years',
-      label:
-        '\u0627\u0644\u0633\u0646\u0648\u0627\u062a \u0627\u0644\u062f\u0631\u0627\u0633\u064a\u0629',
+      label: 'السنوات الدراسية',
       icon: GraduationCap,
       show: hasPermission(admin, 'catalog.read'),
     },
     {
       href: '/semesters',
-      label: '\u0627\u0644\u0641\u0635\u0648\u0644',
+      label: 'الفصول',
       icon: CalendarRange,
       show: hasPermission(admin, 'catalog.read'),
     },
     {
       href: '/courses',
-      label: '\u0627\u0644\u0645\u0648\u0627\u062f',
+      label: 'المواد',
       icon: BookOpen,
       show: hasPermission(admin, 'catalog.read'),
     },
     {
       href: '/sections',
-      label: '\u0627\u0644\u0623\u0642\u0633\u0627\u0645',
+      label: 'الأقسام',
       icon: Boxes,
       show: hasPermission(admin, 'catalog.read'),
     },
     {
       href: '/content',
-      label:
-        '\u0627\u0644\u0645\u062d\u062a\u0648\u0649 \u0648\u0627\u0644\u0645\u0644\u0641\u0627\u062a',
+      label: 'المحتوى والملفات',
       icon: ClipboardList,
       show: hasPermission(admin, 'content.read'),
     },
     {
       href: '/admins',
-      label: '\u0627\u0644\u0623\u062f\u0645\u0646\u0632',
+      label: 'المشرفون',
       icon: ShieldCheck,
       show: hasPermission(admin, 'admins.read'),
     },
     {
       href: '/reports',
-      label: '\u0628\u0644\u0627\u063a\u0627\u062a \u0627\u0644\u0645\u0644\u0641\u0627\u062a',
+      label: 'بلاغات الملفات',
       icon: FileWarning,
       show: hasPermission(admin, 'broken-file-reports.read'),
     },
     {
       href: '/usage',
-      label:
-        '\u062a\u062d\u0644\u064a\u0644 \u0627\u0644\u0627\u0633\u062a\u062e\u062f\u0627\u0645',
+      label: 'تحليل الاستخدام',
       icon: BarChart3,
       show: hasPermission(admin, 'content.usage-analytics.read'),
     },
     {
       href: '/audit',
-      label: '\u0633\u062c\u0644 \u0627\u0644\u0639\u0645\u0644\u064a\u0627\u062a',
+      label: 'سجل العمليات',
       icon: ScrollText,
       show: hasPermission(admin, 'audit.read'),
     },
@@ -89,9 +86,9 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           <span className="brand-mark">
             <Stethoscope size={22} />
           </span>
-          <span>\u0645\u0646\u0635\u0629 \u0627\u0644\u0637\u0628</span>
+          <span>منصة الطب</span>
         </Link>
-        <nav aria-label="\u0627\u0644\u062a\u0646\u0642\u0644 \u0627\u0644\u0631\u0626\u064a\u0633\u064a">
+        <nav aria-label="التنقل الرئيسي">
           {nav
             .filter((item) => item.show)
             .map(({ href, label, icon: Icon }) => (
@@ -114,7 +111,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <header className="mobile-header">
           <Link className="brand" href="/dashboard">
             <Stethoscope size={21} />
-            <span>\u0645\u0646\u0635\u0629 \u0627\u0644\u0637\u0628</span>
+            <span>منصة الطب</span>
           </Link>
         </header>
         {children}

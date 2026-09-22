@@ -9,17 +9,16 @@ interface Stats {
   studentsPerAcademicYear: Array<{ academicYearId: string; nameAr: string; count: number }>;
 }
 const t = {
-  eyebrow: '\u0646\u0638\u0631\u0629 \u0639\u0627\u0645\u0629',
-  title: '\u0627\u0644\u0631\u0626\u064a\u0633\u064a\u0629',
-  welcome: '\u0645\u0631\u062d\u0628\u0627\u064b',
-  total: '\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0637\u0644\u0627\u0628',
-  newStudents: '\u0637\u0644\u0627\u0628 \u062c\u062f\u062f',
-  active: '\u0646\u0634\u0637\u0648\u0646 \u062d\u062f\u064a\u062b\u0627\u064b',
-  bot: '\u0627\u0644\u0637\u0644\u0627\u0628 \u062d\u0633\u0628 \u0627\u0644\u0628\u0648\u062a',
-  years: '\u0627\u0644\u0637\u0644\u0627\u0628 \u062d\u0633\u0628 \u0627\u0644\u0633\u0646\u0629',
-  count: '\u0627\u0644\u0639\u062f\u062f',
-  noStats:
-    '\u0644\u0627 \u062a\u0648\u062c\u062f \u0625\u062d\u0635\u0627\u0626\u064a\u0627\u062a \u0645\u062a\u0627\u062d\u0629 \u0644\u0647\u0630\u0627 \u0627\u0644\u062d\u0633\u0627\u0628',
+  eyebrow: 'نظرة عامة',
+  title: 'الرئيسية',
+  welcome: 'مرحباً',
+  total: 'إجمالي الطلاب',
+  newStudents: 'طلاب جدد',
+  active: 'نشطون حديثاً',
+  bot: 'الطلاب حسب بوت طلاب الطب',
+  years: 'الطلاب حسب السنة',
+  count: 'العدد',
+  noStats: 'لا توجد إحصائيات متاحة لهذا الحساب',
 };
 export default async function DashboardPage() {
   const admin = await getCurrentAdmin();
@@ -34,7 +33,7 @@ export default async function DashboardPage() {
           <h1>{t.title}</h1>
           <p className="muted">
             {t.welcome}
-            {'\u060c '}
+            {'، '}
             {admin.displayNameAr}
           </p>
         </div>
