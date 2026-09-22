@@ -14,6 +14,7 @@ export class StatisticsService {
       this.prisma.student.count({ where: { firstSeenAt: { gte: newSince } } }),
       this.prisma.student.count({ where: { lastSeenAt: { gte: activeSince } } }),
       this.prisma.bot.findMany({
+        where: { status: 'ACTIVE' },
         select: {
           id: true,
           key: true,

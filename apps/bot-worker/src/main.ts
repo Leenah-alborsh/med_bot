@@ -1,73 +1,70 @@
+import { PrismaClient } from '@medical/database';
 import { loadConfig } from './config.js';
-import { createManagedBot, type ManagedBotConfig } from './bot/create-bot.js';
+import { createMedicalBot } from './bot/create-bot.js';
 
-function getConfiguredBots(): ManagedBotConfig[] {
+const LOCK_ID = 7_314_159;
+const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function main() {
   const config = loadConfig();
-
   if (!config.BOT_WORKER_ENABLED) {
-    console.log('Bot worker disabled. Set BOT_WORKER_ENABLED=true to start polling.');
-    return [];
+    console.log('Bot worker disabled.');
+    return;
+  }
+  if (!config.MEDICAL_BOT_TOKEN) throw new Error('BOT_WORKER_ENABLED requires MEDICAL_BOT_TOKEN');
+
+  const prisma = new PrismaClient();
+  const lock = await prisma.$queryRaw<
+    Array<{ acquired: boolean }>
+  >`SELECT pg_try_advisory_lock(${LOCK_ID}) AS acquired`;
+  if (!lock[0]?.acquired) {
+    console.warn('Another medical bot polling instance is active; exiting safely.');
+    await prisma.$disconnect();
+    return;
   }
 
-  const candidates: Array<ManagedBotConfig | null> = [
-    config.PRECLINICAL_BOT_TOKEN
-      ? {
-          key: 'preclinical',
-          displayName: 'Preclinical Bot',
-          token: config.PRECLINICAL_BOT_TOKEN,
-        }
-      : null,
-    config.CLINICAL_BOT_TOKEN
-      ? {
-          key: 'clinical',
-          displayName: 'Clinical Bot',
-          token: config.CLINICAL_BOT_TOKEN,
-        }
-      : null,
-  ];
+  const bot = createMedicalBot({
+    token: config.MEDICAL_BOT_TOKEN,
+    prisma,
+    uploadDirectory: config.UPLOAD_DIRECTORY,
+  });
+  await bot.init();
+  await prisma.bot.update({
+    where: { key: 'medical-main' },
+    data: { telegramUsername: bot.botInfo.username, status: 'ACTIVE' },
+  });
+  console.log({ botId: bot.botInfo.id, username: bot.botInfo.username, status: 'validated' });
 
-  const bots = candidates.filter((bot): bot is ManagedBotConfig => bot !== null);
-
-  if (bots.length === 0) {
-    console.warn('Bot worker enabled, but no bot tokens were provided.');
-  }
-
-  return bots;
-}
-
-function main() {
-  const bots = getConfiguredBots().map((config) => ({
-    key: config.key,
-    bot: createManagedBot(config),
-  }));
-
+  let stopping = false;
   const stop = async (signal: NodeJS.Signals) => {
+    if (stopping) return;
+    stopping = true;
     console.log(`Received ${signal}; stopping bot worker.`);
-    await Promise.all(bots.map(({ bot }) => bot.stop().catch(() => undefined)));
-    process.exit(0);
+    await bot.stop().catch(() => undefined);
+    await prisma.$queryRaw`SELECT pg_advisory_unlock(${LOCK_ID})`.catch(() => undefined);
+    await prisma.$disconnect();
   };
+  process.once('SIGINT', () => void stop('SIGINT'));
+  process.once('SIGTERM', () => void stop('SIGTERM'));
 
-  process.once('SIGINT', () => {
-    void stop('SIGINT');
-  });
-  process.once('SIGTERM', () => {
-    void stop('SIGTERM');
-  });
-
-  for (const { key, bot } of bots) {
-    void bot
-      .start({
-        onStart: ({ username }) => {
-          console.log({ botKey: key, username, status: 'started' });
-        },
-      })
-      .catch((error: unknown) => {
-        console.error({
-          botKey: key,
-          message: error instanceof Error ? error.message : 'Failed to start bot',
-        });
+  while (!stopping) {
+    try {
+      await bot.start({
+        drop_pending_updates: false,
+        onStart: ({ id, username }) => console.log({ botId: id, username, status: 'polling' }),
       });
+    } catch (error) {
+      if (stopping) break;
+      console.error({
+        message: error instanceof Error ? error.message : 'Telegram polling failed',
+        retrySeconds: 5,
+      });
+      await sleep(5000);
+    }
   }
 }
 
-void main();
+void main().catch((error: unknown) => {
+  console.error({ message: error instanceof Error ? error.message : 'Bot worker failed to start' });
+  process.exitCode = 1;
+});

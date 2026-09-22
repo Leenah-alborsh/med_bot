@@ -8,11 +8,12 @@ function csrfToken() {
 export async function clientApi<T>(path: string, init: RequestInit = {}): Promise<T> {
   const method = init.method?.toUpperCase() ?? 'GET';
   const csrf = !['GET', 'HEAD', 'OPTIONS'].includes(method) ? csrfToken() : undefined;
+  const isFormData = init.body instanceof FormData;
   const response = await fetch(`/api/backend/${path}`, {
     ...init,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}),
       ...init.headers,
     },

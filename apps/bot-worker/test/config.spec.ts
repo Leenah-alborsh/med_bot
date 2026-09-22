@@ -13,11 +13,11 @@ describe('loadConfig', () => {
     expect(
       loadConfig({
         BOT_WORKER_ENABLED: 'true',
-        PRECLINICAL_BOT_TOKEN: 'placeholder-token',
+        MEDICAL_BOT_TOKEN: 'placeholder-token',
       }),
     ).toMatchObject({
       BOT_WORKER_ENABLED: true,
-      PRECLINICAL_BOT_TOKEN: 'placeholder-token',
+      MEDICAL_BOT_TOKEN: 'placeholder-token',
     });
   });
 });

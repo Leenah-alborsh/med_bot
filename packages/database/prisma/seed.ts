@@ -13,15 +13,19 @@ const rolePermissions: Record<string, PermissionKey[]> = {
   [SUPER_ADMIN_ROLE_KEY]: [...permissionKeys],
   'bot-admin': ['bots.read', 'bots.manage'],
   'content-admin': [
+    'catalog.read',
+    'catalog.create',
+    'catalog.update',
+    'catalog.archive',
     'content.read',
     'content.create',
     'content.update',
-    'content.delete',
+    'content.archive',
     'content.publish',
   ],
-  reviewer: ['content.read', 'content.update'],
+  reviewer: ['catalog.read', 'content.read', 'content.update', 'content.publish'],
   'announcement-admin': ['bots.read', 'announcements.send'],
-  viewer: ['bots.read', 'content.read'],
+  viewer: ['bots.read', 'catalog.read', 'content.read'],
 };
 
 const roleDetails = [
@@ -81,31 +85,31 @@ const roleDetails = [
   },
 ] as const;
 
-async function upsertBots() {
-  const preclinical = await prisma.bot.upsert({
-    where: { key: 'preclinical' },
-    update: { displayName: 'Preclinical Bot', groupType: 'PRECLINICAL', status: 'DRAFT' },
+async function upsertBot() {
+  const bot = await prisma.bot.upsert({
+    where: { key: 'medical-main' },
+    update: {
+      displayName: 'Medical Education Bot',
+      groupType: 'ALL_YEARS',
+      status: 'ACTIVE',
+      tokenReference: 'MEDICAL_BOT_TOKEN',
+    },
     create: {
-      key: 'preclinical',
-      displayName: 'Preclinical Bot',
-      groupType: 'PRECLINICAL',
-      status: 'DRAFT',
+      key: 'medical-main',
+      displayName: 'Medical Education Bot',
+      groupType: 'ALL_YEARS',
+      status: 'ACTIVE',
+      tokenReference: 'MEDICAL_BOT_TOKEN',
     },
   });
-  const clinical = await prisma.bot.upsert({
-    where: { key: 'clinical' },
-    update: { displayName: 'Clinical Bot', groupType: 'CLINICAL', status: 'DRAFT' },
-    create: {
-      key: 'clinical',
-      displayName: 'Clinical Bot',
-      groupType: 'CLINICAL',
-      status: 'DRAFT',
-    },
+  await prisma.bot.updateMany({
+    where: { key: { in: ['preclinical', 'clinical'] } },
+    data: { status: 'INACTIVE' },
   });
-  return { preclinical, clinical };
+  return bot;
 }
 
-async function upsertAcademicYears(botIds: { preclinical: string; clinical: string }) {
+async function upsertAcademicYears(botId: string) {
   const names = ['الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة'];
   for (const [index, ordinal] of names.entries()) {
     const number = index + 1;
@@ -124,7 +128,6 @@ async function upsertAcademicYears(botIds: { preclinical: string; clinical: stri
         displayOrder: number,
       },
     });
-    const botId = number <= 3 ? botIds.preclinical : botIds.clinical;
     await prisma.academicYearBot.upsert({
       where: { academicYearId_botId: { academicYearId: academicYear.id, botId } },
       update: {},
@@ -221,8 +224,9 @@ async function retireOwnerRole() {
 }
 
 async function main() {
-  const bots = await upsertBots();
-  await upsertAcademicYears({ preclinical: bots.preclinical.id, clinical: bots.clinical.id });
+  const bot = await upsertBot();
+  await upsertAcademicYears(bot.id);
+  await prisma.academicYearBot.deleteMany({ where: { botId: { not: bot.id } } });
   const permissions = await upsertPermissions();
   await upsertRoles(permissions);
   await retireOwnerRole();

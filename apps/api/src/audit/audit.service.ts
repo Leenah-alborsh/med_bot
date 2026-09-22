@@ -52,4 +52,25 @@ export class AuditService {
       },
     });
   }
+
+  async list(page = 1, pageSize = 50) {
+    const [items, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          actionKey: true,
+          entityType: true,
+          entityId: true,
+          ipAddress: true,
+          createdAt: true,
+          actor: { select: { id: true, displayNameAr: true, email: true } },
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      }),
+      this.prisma.auditLog.count(),
+    ]);
+    return { items, total, page, pageSize };
+  }
 }

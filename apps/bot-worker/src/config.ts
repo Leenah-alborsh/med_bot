@@ -8,8 +8,8 @@ const configSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
-  PRECLINICAL_BOT_TOKEN: tokenSchema,
-  CLINICAL_BOT_TOKEN: tokenSchema,
+  MEDICAL_BOT_TOKEN: tokenSchema,
+  UPLOAD_DIRECTORY: z.string().trim().min(1).default('./var/uploads'),
 });
 
 export type WorkerConfig = z.infer<typeof configSchema>;

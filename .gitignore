@@ -9,4 +9,5 @@ coverage/
 *.log
 pnpm-debug.log*
 *.tsbuildinfo
+var/uploads/
 Dockerfile.local

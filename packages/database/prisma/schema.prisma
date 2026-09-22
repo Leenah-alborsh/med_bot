@@ -8,8 +8,40 @@ datasource db {
 }
 
 enum BotGroupType {
+  ALL_YEARS
   PRECLINICAL
   CLINICAL
+}
+
+enum ContentType {
+  TEXT
+  LINK
+  FILE
+}
+
+enum PublicationState {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum StorageProvider {
+  LOCAL
+  TELEGRAM
+  EXTERNAL_URL
+}
+
+enum ContentAccessEventType {
+  VIEW
+  OPEN_LINK
+  DOWNLOAD_REQUEST
+}
+
+enum BrokenFileReportStatus {
+  OPEN
+  REVIEWED
+  RESOLVED
+  DISMISSED
 }
 
 enum BotStatus {
@@ -61,6 +93,8 @@ model Student {
   updatedAt              DateTime               @updatedAt
   selectedAcademicYear   AcademicYear?          @relation(fields: [selectedAcademicYearId], references: [id], onDelete: SetNull)
   memberships            StudentBotMembership[]
+  accessEvents           ContentAccessEvent[]
+  brokenFileReports      BrokenFileReport[]
 
   @@index([telegramUserId])
   @@index([selectedAcademicYearId])
@@ -69,16 +103,17 @@ model Student {
 }
 
 model StudentBotMembership {
-  id              String   @id @default(uuid()) @db.Uuid
-  studentId       String   @db.Uuid
-  botId           String   @db.Uuid
-  firstSeenAt     DateTime @default(now())
-  lastInteraction DateTime @default(now())
-  isBlocked       Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  bot             Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  id              String               @id @default(uuid()) @db.Uuid
+  studentId       String               @db.Uuid
+  botId           String               @db.Uuid
+  firstSeenAt     DateTime             @default(now())
+  lastInteraction DateTime             @default(now())
+  isBlocked       Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  student         Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  bot             Bot                  @relation(fields: [botId], references: [id], onDelete: Cascade)
+  accessEvents    ContentAccessEvent[]
 
   @@unique([studentId, botId])
   @@index([botId, isBlocked])
@@ -94,6 +129,7 @@ model AcademicYear {
   displayOrder  Int
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  archivedAt    DateTime?
   botVisibility AcademicYearBot[]
   semesters     Semester[]
   students      Student[]
@@ -123,6 +159,7 @@ model Semester {
   isActive       Boolean      @default(true)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  archivedAt     DateTime?
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
   courses        Course[]
 
@@ -141,6 +178,7 @@ model Course {
   isActive      Boolean      @default(true)
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  archivedAt    DateTime?
   semester      Semester     @relation(fields: [semesterId], references: [id], onDelete: Cascade)
   sections      Section[]
   adminScopes   AdminScope[]
@@ -149,42 +187,47 @@ model Course {
 }
 
 model Section {
-  id           String    @id @default(uuid()) @db.Uuid
-  courseId     String    @db.Uuid
-  parentId     String?   @db.Uuid
+  id           String        @id @default(uuid()) @db.Uuid
+  courseId     String        @db.Uuid
+  parentId     String?       @db.Uuid
   nameAr       String
   nameEn       String
   displayOrder Int
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  course       Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  parent       Section?  @relation("SectionHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children     Section[] @relation("SectionHierarchy")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  archivedAt   DateTime?
+  course       Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  parent       Section?      @relation("SectionHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Section[]     @relation("SectionHierarchy")
+  contentItems ContentItem[]
 
   @@index([courseId, parentId, isActive, displayOrder])
 }
 
 model AdminUser {
-  id                 String            @id @default(uuid()) @db.Uuid
-  email              String            @unique
+  id                 String             @id @default(uuid()) @db.Uuid
+  email              String             @unique
   passwordHash       String?
-  telegramUserId     BigInt?           @unique
+  telegramUserId     BigInt?            @unique
   displayNameAr      String
   displayNameEn      String
-  status             AdminStatus       @default(PENDING)
-  mustChangePassword Boolean           @default(true)
+  status             AdminStatus        @default(PENDING)
+  mustChangePassword Boolean            @default(true)
   lastLoginAt        DateTime?
-  failedLoginCount   Int               @default(0)
+  failedLoginCount   Int                @default(0)
   lockedUntil        DateTime?
   passwordChangedAt  DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
   roles              AdminRole[]
   scopes             AdminScope[]
   auditLogs          AuditLog[]
   sessions           AdminSession[]
   setupTokens        AdminSetupToken[]
+  createdContent     ContentItem[]      @relation("ContentCreatedBy")
+  updatedContent     ContentItem[]      @relation("ContentUpdatedBy")
+  reviewedReports    BrokenFileReport[] @relation("ReportReviewedBy")
 
   @@index([status])
 }
@@ -305,4 +348,87 @@ model AdminSetupToken {
   adminUser   AdminUser              @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
 
   @@index([adminUserId, purpose, expiresAt])
+}
+
+model ContentItem {
+  id            String               @id @default(uuid()) @db.Uuid
+  sectionId     String               @db.Uuid
+  titleAr       String
+  titleEn       String?
+  descriptionAr String?
+  descriptionEn String?
+  bodyText      String?
+  contentType   ContentType
+  state         PublicationState     @default(DRAFT)
+  isActive      Boolean              @default(true)
+  displayOrder  Int
+  publishedAt   DateTime?
+  archivedAt    DateTime?
+  createdById   String               @db.Uuid
+  updatedById   String               @db.Uuid
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  section       Section              @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  createdBy     AdminUser            @relation("ContentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy     AdminUser            @relation("ContentUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  attachments   ContentAttachment[]
+  accessEvents  ContentAccessEvent[]
+  reports       BrokenFileReport[]
+
+  @@unique([sectionId, displayOrder])
+  @@index([sectionId, state, isActive, displayOrder])
+  @@index([contentType, state])
+}
+
+model ContentAttachment {
+  id               String             @id @default(uuid()) @db.Uuid
+  contentItemId    String             @db.Uuid
+  storageProvider  StorageProvider
+  originalFilename String
+  storedPath       String?
+  externalUrl      String?
+  telegramFileId   String?
+  mimeType         String
+  fileSize         BigInt
+  checksum         String?
+  createdAt        DateTime           @default(now())
+  contentItem      ContentItem        @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  reports          BrokenFileReport[]
+
+  @@index([contentItemId, storageProvider])
+}
+
+model ContentAccessEvent {
+  id              String                 @id @default(uuid()) @db.Uuid
+  studentId       String                 @db.Uuid
+  contentItemId   String                 @db.Uuid
+  botMembershipId String?                @db.Uuid
+  eventType       ContentAccessEventType
+  createdAt       DateTime               @default(now())
+  student         Student                @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  contentItem     ContentItem            @relation(fields: [contentItemId], references: [id], onDelete: Restrict)
+  botMembership   StudentBotMembership?  @relation(fields: [botMembershipId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, createdAt])
+  @@index([contentItemId, eventType, createdAt])
+}
+
+model BrokenFileReport {
+  id             String                 @id @default(uuid()) @db.Uuid
+  studentId      String                 @db.Uuid
+  contentItemId  String                 @db.Uuid
+  attachmentId   String?                @db.Uuid
+  reasonCategory String?
+  status         BrokenFileReportStatus @default(OPEN)
+  reviewedById   String?                @db.Uuid
+  reviewedAt     DateTime?
+  resolutionNote String?
+  createdAt      DateTime               @default(now())
+  student        Student                @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  contentItem    ContentItem            @relation(fields: [contentItemId], references: [id], onDelete: Restrict)
+  attachment     ContentAttachment?     @relation(fields: [attachmentId], references: [id], onDelete: SetNull)
+  reviewedBy     AdminUser?             @relation("ReportReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([studentId, contentItemId, createdAt])
 }

@@ -1,12 +1,12 @@
 # Medical Telegram Platform
 
-Production-oriented monorepo for two Telegram bots, a NestJS API, a PostgreSQL database, and an Arabic-first Next.js administration application. Phase 2 adds secure administrator authentication, authorization, administrator management, audit logging, and aggregate student statistics.
+Production-oriented monorepo for one all-years Telegram bot, a NestJS API, PostgreSQL, and an Arabic-first Next.js administration application. Phase 3 delivers the first complete catalog and content flow from the dashboard to Telegram while preserving secure authentication, scoped RBAC, audit logging, and aggregate statistics.
 
 ## Architecture
 
 - `apps/api`: versioned NestJS API. It owns authentication, opaque sessions, CSRF validation, RBAC, scopes, audit events, and statistics.
 - `apps/admin`: Next.js App Router dashboard. A same-origin route handler proxies browser requests to the API; no authentication value is stored in localStorage.
-- `apps/bot-worker`: shared grammY worker for the preclinical and clinical bots.
+- `apps/bot-worker`: grammY worker for the single `medical-main` bot serving all six academic years.
 - `packages/database`: Prisma schema, migrations, generated client exports, and idempotent seed.
 - `packages/shared`: permission constants, password/email validation, and public response schemas.
 
@@ -75,7 +75,7 @@ Role assignment rejects protected roles, inactive roles, and every role containi
 
 A Super Admin can list/search administrators, create pending secondary accounts, update names/email, disable/reactivate accounts, assign allowed roles and bot/year/course scopes, revoke sessions, regenerate setup credentials, and inspect relevant audit history. Administrators are disabled rather than deleted. Self-disable and disabling the final active Super Admin are rejected.
 
-Permissions answer what an administrator may do. Scopes answer where they may do it. An administrator with no scope rows has global scope for their permitted actions; otherwise `ScopeAuthorizationService` requires a matching bot, academic year, or course row. Controllers reuse authentication, permission, CSRF, and scope services instead of duplicating policy logic.
+Permissions answer what an administrator may do. Scopes answer where they may do it. Super Admin is always global. A secondary administrator requires at least one matching bot, academic year, or course scope for catalog/content access; having no scope does not grant global content access. Controllers reuse authentication, permission, CSRF, and scope services instead of duplicating policy logic.
 
 Creating or regenerating an account credential returns the raw random value exactly once. The database stores only its hash. It expires after 24 hours, is single-use, and older unused credentials are revoked. Because email delivery is not configured, the Super Admin must transfer it securely. It is never included in list/detail responses, audit JSON, logs, or URLs.
 
@@ -89,7 +89,7 @@ Creating or regenerating an account credential returns the raw random value exac
 - New students: `firstSeenAt` within the last 30 days.
 - Recently active students: `lastSeenAt` within the last 7 days.
 
-The endpoint uses database count queries and relation counts, handles an empty database, and returns no individual student or Telegram data. Content popularity and broken-file metrics remain placeholders until their source events and workflows exist.
+The endpoint uses database count queries and relation counts, handles an empty database, and returns no individual student or Telegram data. Phase 3 records content access events for the protected usage analytics endpoint and supports Super Admin broken-file report management.
 
 ## Audit events
 
@@ -107,13 +107,39 @@ Required or configurable values are documented in `.env.example`:
 - `NEXT_PUBLIC_API_BASE_URL` for public API configuration
 - `API_INTERNAL_BASE_URL` for server-side Next.js requests
 - `SWAGGER_ENABLED`, `LOG_LEVEL`
-- Bot worker enablement and token values
+- `BOT_WORKER_ENABLED` and the single `MEDICAL_BOT_TOKEN`
+- `UPLOAD_DIRECTORY` and `MAX_UPLOAD_BYTES`
 
 Use a deployment secret manager for real database credentials and Telegram tokens. Never commit `.env`.
 
 ## Database and checks
 
-Phase 2 migration: `20260920220000_phase_2_admin_auth`.
+Phase 3 migrations:
+
+- `20260921163035_phase_3_single_bot_enum`
+- `20260921163036_phase_3_single_bot_content`
+
+## Catalog, content, and file storage
+
+The dashboard manages academic years, semesters, courses, nested sections, content publication, and attachments. Content can be plain text, an HTTPS link, or a file. Only active, published content is queried by the Telegram worker.
+
+Attachments support:
+
+- Validated public HTTPS URLs. The API does not fetch arbitrary URLs.
+- Existing trusted Telegram `file_id` values.
+- Local development uploads with MIME/extension allowlists, random stored names, path containment checks, and configurable limits.
+
+Local files are stored under `var/uploads` by default and are ignored by Git. This is an MVP development provider, not durable production storage. Deployment must replace it with managed object storage and retain the same attachment metadata contract. When Telegram accepts a local document, the worker stores its returned `file_id` for future delivery.
+
+## Telegram development flow
+
+Set `MEDICAL_BOT_TOKEN` privately in `.env`, enable `BOT_WORKER_ENABLED`, and run:
+
+```bash
+pnpm --filter @medical/bot-worker dev
+```
+
+The worker validates the token using `getMe`, logs only the safe bot ID/username, acquires a PostgreSQL advisory lock to prevent duplicate polling, and starts long polling. Student navigation is stage, year, semester, course, section, then published content. The worker persists selected year, access events, and duplicate-limited broken-file reports.
 
 ```bash
 pnpm db:format
@@ -130,4 +156,4 @@ pnpm format:check
 
 ## Intentionally deferred
 
-Content CRUD, uploads, announcements, quizzes, production Telegram menus, popularity tracking, most-used course/file analytics, broken-file report workflows, custom-role editing, outbound setup email, deployment, and database-backed end-to-end tests remain outside Phase 2.
+Production object storage, webhooks, announcements, quizzes, custom-role editing, outbound setup email, deployment, and database-backed browser automation remain outside Phase 3.

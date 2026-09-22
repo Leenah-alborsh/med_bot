@@ -38,4 +38,28 @@ describe('authorization', () => {
       ForbiddenException,
     );
   });
+
+  it('allows Super Admin globally and requires matching nested scope for secondary admins', async () => {
+    const findMany = vi
+      .fn()
+      .mockResolvedValue([{ botId: 'bot', academicYearId: 'year', courseId: 'course' }]);
+    const service = new ScopeAuthorizationService({
+      adminScope: { findMany },
+    } as unknown as PrismaService);
+    await expect(
+      service.assertResourceAccess({ id: 'root', roleKeys: ['super-admin'] }, { botId: 'other' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      service.assertResourceAccess(
+        { id: 'secondary', roleKeys: ['content-admin'] },
+        { botId: 'bot', academicYearId: 'year', courseId: 'course' },
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      service.assertResourceAccess(
+        { id: 'secondary', roleKeys: ['content-admin'] },
+        { botId: 'bot', academicYearId: 'year', courseId: 'outside' },
+      ),
+    ).rejects.toThrow(ForbiddenException);
+  });
 });
