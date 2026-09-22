@@ -1,5 +1,5 @@
 'use client';
-import { Archive, Paperclip, Plus, Send } from 'lucide-react';
+import { Archive, Paperclip, Pencil, Plus, Save, Send, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
@@ -7,6 +7,8 @@ type Item = {
   id: string;
   titleAr: string;
   titleEn?: string;
+  sectionId: string;
+  bodyText?: string;
   contentType: 'TEXT' | 'LINK' | 'FILE';
   state: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   displayOrder: number;
@@ -20,6 +22,7 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [editing, setEditing] = useState<Item | null>(null);
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -54,6 +57,40 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'تعذر إنشاء المحتوى.');
+    }
+  }
+  async function saveEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    const data = new FormData(event.currentTarget);
+    try {
+      await clientApi(`content/${editing.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          sectionId: data.get('sectionId'),
+          titleAr: data.get('titleAr'),
+          titleEn: data.get('titleEn') || undefined,
+          contentType: data.get('contentType'),
+          bodyText: data.get('bodyText') || undefined,
+          displayOrder: Number(data.get('displayOrder')),
+        }),
+      });
+      setEditing(null);
+      setMessage('تم حفظ تعديلات المحتوى.');
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذر تعديل المحتوى.');
+    }
+  }
+  async function remove(id: string) {
+    if (!confirm('سيُحذف المحتوى وملفاته نهائيًا. هل أنت متأكد؟')) return;
+    try {
+      await clientApi(`content/${id}`, { method: 'DELETE' });
+      setEditing(null);
+      setMessage('تم حذف المحتوى.');
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذر حذف المحتوى.');
     }
   }
   async function state(id: string, next: 'PUBLISHED' | 'ARCHIVED') {
@@ -126,7 +163,15 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
                   {contentTypeLabels[item.contentType]}
                 </span>
               </div>
-              <div className="row-actions">
+              <div className="row-actions action-cluster">
+                <button
+                  className="icon-button"
+                  title="تعديل"
+                  aria-label="تعديل"
+                  onClick={() => setEditing(item)}
+                >
+                  <Pencil size={17} />
+                </button>
                 {item.state !== 'PUBLISHED' && (
                   <button
                     className="icon-button success"
@@ -137,13 +182,90 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
                   </button>
                 )}
                 <button
-                  className="icon-button danger"
+                  className="icon-button archive"
                   title="أرشفة"
+                  aria-label="أرشفة"
                   onClick={() => void state(item.id, 'ARCHIVED')}
+                  disabled={item.state === 'ARCHIVED'}
                 >
                   <Archive size={17} />
                 </button>
+                <button
+                  className="icon-button danger"
+                  title={item.state === 'ARCHIVED' ? 'حذف نهائي' : 'أرشف المحتوى أولًا'}
+                  aria-label="حذف نهائي"
+                  onClick={() => void remove(item.id)}
+                  disabled={item.state !== 'ARCHIVED'}
+                >
+                  <Trash2 size={17} />
+                </button>
               </div>
+              {editing?.id === item.id && (
+                <form className="inline-editor form" onSubmit={saveEdit}>
+                  <div className="section-title">
+                    <Pencil size={17} />
+                    <h2>تعديل المحتوى</h2>
+                    <button
+                      className="icon-button dismiss"
+                      type="button"
+                      title="إلغاء"
+                      onClick={() => setEditing(null)}
+                    >
+                      <X size={17} />
+                    </button>
+                  </div>
+                  <div className="compact-form-grid">
+                    <label>
+                      القسم
+                      <select name="sectionId" defaultValue={editing.sectionId} required>
+                        {sections.map((section) => (
+                          <option key={section.id} value={section.id}>
+                            {section.nameAr}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      العنوان بالعربية
+                      <input name="titleAr" defaultValue={editing.titleAr} required />
+                    </label>
+                    <label>
+                      العنوان بالإنجليزية
+                      <input name="titleEn" defaultValue={editing.titleEn ?? ''} dir="ltr" />
+                    </label>
+                    <label>
+                      النوع
+                      <select name="contentType" defaultValue={editing.contentType}>
+                        <option value="TEXT">نص</option>
+                        <option value="LINK">رابط</option>
+                        <option value="FILE">ملف</option>
+                      </select>
+                    </label>
+                    <label>
+                      ترتيب العرض
+                      <input
+                        name="displayOrder"
+                        type="number"
+                        min="0"
+                        defaultValue={editing.displayOrder}
+                        required
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    النص أو الوصف
+                    <textarea name="bodyText" rows={4} defaultValue={editing.bodyText ?? ''} />
+                  </label>
+                  <div className="form-actions">
+                    <button className="primary" type="submit">
+                      <Save size={17} /> حفظ التعديلات
+                    </button>
+                    <button type="button" onClick={() => setEditing(null)}>
+                      إلغاء
+                    </button>
+                  </div>
+                </form>
+              )}
               {item.contentType === 'FILE' && (
                 <form className="inline-upload" onSubmit={(event) => void upload(item.id, event)}>
                   <label>

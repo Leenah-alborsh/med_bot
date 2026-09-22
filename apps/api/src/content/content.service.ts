@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { basename } from 'node:path';
+import { Prisma } from '@medical/database';
 import { SUPER_ADMIN_ROLE_KEY } from '@medical/shared';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthenticatedAdmin, RequestMetadata } from '../auth/auth.types.js';
@@ -230,6 +231,43 @@ export class ContentService {
     });
   }
 
+  async delete(id: string, actor: Actor, metadata: RequestMetadata) {
+    const existing = await this.contentTarget(id);
+    await this.assertScope(actor, existing.courseId, existing.academicYearId);
+    const storedFiles = await this.prisma.contentAttachment.findMany({
+      where: { contentItemId: id, storageChatId: { not: null }, storageMessageId: { not: null } },
+      select: { storageChatId: true, storageMessageId: true },
+    });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const before = await tx.contentItem.findUniqueOrThrow({ where: { id } });
+        if (before.state !== 'ARCHIVED')
+          throw new BadRequestException('يجب أرشفة المحتوى قبل حذفه نهائيًا.');
+        await tx.contentItem.delete({ where: { id } });
+        await this.audit.record({
+          actorId: actor.id,
+          actionKey: 'content.delete',
+          entityType: 'ContentItem',
+          entityId: id,
+          before,
+          metadata,
+          client: tx,
+        });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003')
+        throw new BadRequestException(
+          'لا يمكن حذف المحتوى لأنه مرتبط بسجل استخدام أو بلاغ. أبقه مؤرشفًا للحفاظ على السجل.',
+        );
+      throw error;
+    }
+    await Promise.all(
+      storedFiles.map((file) =>
+        this.telegramStorage.remove(file.storageChatId!, file.storageMessageId!),
+      ),
+    );
+    return { deleted: true };
+  }
   async attach(id: string, input: AttachmentInput, actor: Actor, metadata: RequestMetadata) {
     const target = await this.contentTarget(id);
     await this.assertScope(actor, target.courseId, target.academicYearId);

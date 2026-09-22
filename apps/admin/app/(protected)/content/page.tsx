@@ -4,6 +4,8 @@ type Item = {
   id: string;
   titleAr: string;
   titleEn?: string;
+  sectionId: string;
+  bodyText?: string;
   contentType: 'TEXT' | 'LINK' | 'FILE';
   state: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   displayOrder: number;

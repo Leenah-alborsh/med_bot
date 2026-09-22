@@ -72,6 +72,14 @@ export class TelegramFileStorageService {
       .catch(() => this.logger.warn('Could not remove an orphaned Telegram storage message'));
   }
 
+  async remove(storageChatId: bigint, storageMessageId: number) {
+    if (!this.api) return;
+    await this.api
+      .deleteMessage(storageChatId.toString(), storageMessageId)
+      .catch(() =>
+        this.logger.warn('Could not remove a deleted content file from Telegram storage'),
+      );
+  }
   private configuration() {
     if (!this.api || !this.channelId)
       throw new ServiceUnavailableException(

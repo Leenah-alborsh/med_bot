@@ -818,3 +818,78 @@ code {
     font-size: 0.9rem;
   }
 }
+
+/* Clear, consistent management actions and compact editors. */
+.action-cluster {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+}
+.icon-button {
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+.icon-button:hover:not(:disabled) {
+  border-color: #8da8bc;
+  background: #eef5f9;
+}
+.icon-button.archive {
+  color: #7a5c12;
+}
+.icon-button.archive:hover:not(:disabled) {
+  border-color: #d5b45c;
+  background: #fff8df;
+}
+.icon-button.danger:hover:not(:disabled) {
+  border-color: #e0a09a;
+  background: #fff0ee;
+}
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+.section-title .dismiss {
+  margin-inline-start: auto;
+  color: var(--muted);
+}
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.edit-panel {
+  border-top: 3px solid var(--blue);
+}
+.workspace-grid:has(.edit-panel) > .editor-panel:not(.edit-panel) {
+  display: none;
+}
+.inline-editor {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+  background: #f8fbfc;
+}
+.compact-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.inline-editor .section-title {
+  margin-bottom: 4px;
+}
+@media (max-width: 640px) {
+  .action-cluster {
+    width: 100%;
+    justify-content: flex-start;
+    padding-top: 4px;
+  }
+  .compact-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

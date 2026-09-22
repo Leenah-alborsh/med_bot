@@ -1,6 +1,6 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { Archive, Plus, Trash2 } from 'lucide-react';
+import { Archive, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { clientApi } from '../lib/client-api';
 
@@ -30,6 +30,7 @@ export function CatalogManager({
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [selectedYearId, setSelectedYearId] = useState('');
+  const [editing, setEditing] = useState<Item | null>(null);
   const visibleParents =
     kind === 'courses'
       ? parents.filter((parent) => parent.academicYearId === selectedYearId)
@@ -56,6 +57,26 @@ export function CatalogManager({
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'تعذر الحفظ.');
+    }
+  }
+  async function saveEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    const data = new FormData(event.currentTarget);
+    try {
+      await clientApi(`catalog/${kind.slice(0, -1)}/${editing.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          nameAr: data.get('nameAr'),
+          nameEn: data.get('nameEn'),
+          displayOrder: Number(data.get('displayOrder')),
+        }),
+      });
+      setEditing(null);
+      setMessage('تم حفظ التعديلات.');
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذر حفظ التعديلات.');
     }
   }
   async function archive(id: string) {
@@ -114,22 +135,34 @@ export function CatalogManager({
                     </span>
                   </td>
                   <td>
-                    <button
-                      className="icon-button danger"
-                      title="أرشفة"
-                      onClick={() => void archive(item.id)}
-                      disabled={!item.isActive}
-                    >
-                      <Archive size={17} />
-                    </button>
-                    <button
-                      className="icon-button danger"
-                      title={item.isActive ? 'أرشف العنصر أولًا' : 'حذف نهائي'}
-                      onClick={() => void remove(item.id)}
-                      disabled={item.isActive}
-                    >
-                      <Trash2 size={17} />
-                    </button>
+                    <div className="row-actions action-cluster">
+                      <button
+                        className="icon-button"
+                        title="تعديل"
+                        aria-label="تعديل"
+                        onClick={() => setEditing(item)}
+                      >
+                        <Pencil size={17} />
+                      </button>
+                      <button
+                        className="icon-button archive"
+                        title="أرشفة"
+                        aria-label="أرشفة"
+                        onClick={() => void archive(item.id)}
+                        disabled={!item.isActive}
+                      >
+                        <Archive size={17} />
+                      </button>
+                      <button
+                        className="icon-button danger"
+                        title={item.isActive ? 'أرشف العنصر أولًا' : 'حذف نهائي'}
+                        aria-label="حذف نهائي"
+                        onClick={() => void remove(item.id)}
+                        disabled={item.isActive}
+                      >
+                        <Trash2 size={17} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -137,6 +170,48 @@ export function CatalogManager({
           </table>
           {!items.length && <div className="empty-state">لا توجد عناصر حتى الآن.</div>}
         </div>
+        {editing && (
+          <form className="editor-panel form edit-panel" onSubmit={saveEdit}>
+            <div className="section-title">
+              <Pencil size={18} />
+              <h2>تعديل {labels[kind].singular}</h2>
+              <button
+                className="icon-button dismiss"
+                type="button"
+                title="إلغاء"
+                onClick={() => setEditing(null)}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <label>
+              الاسم بالعربية
+              <input name="nameAr" defaultValue={editing.nameAr} required />
+            </label>
+            <label>
+              الاسم بالإنجليزية
+              <input name="nameEn" defaultValue={editing.nameEn} dir="ltr" required />
+            </label>
+            <label>
+              ترتيب العرض
+              <input
+                name="displayOrder"
+                type="number"
+                min="0"
+                defaultValue={editing.displayOrder}
+                required
+              />
+            </label>
+            <div className="form-actions">
+              <button className="primary" type="submit">
+                <Save size={17} /> حفظ التعديلات
+              </button>
+              <button type="button" onClick={() => setEditing(null)}>
+                إلغاء
+              </button>
+            </div>
+          </form>
+        )}
         <form className="editor-panel form" onSubmit={submit}>
           <div className="section-title">
             <Plus size={18} />

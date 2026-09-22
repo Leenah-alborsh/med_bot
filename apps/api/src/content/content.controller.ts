@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -80,6 +81,16 @@ export class ContentController {
     @Req() request: Request,
   ) {
     return this.content.update(id, input, actor, metadata(request));
+  }
+  @Delete(':id')
+  @UseGuards(CsrfGuard)
+  @RequirePermissions('content.archive')
+  delete(
+    @Param('id') id: string,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Req() request: Request,
+  ) {
+    return this.content.delete(id, actor, metadata(request));
   }
   @Post(':id/state')
   @UseGuards(CsrfGuard)
