@@ -16,3 +16,4 @@ db-backups/
 *.dump
 *.backup
 *.sql.gz
+.vercel
