@@ -35,5 +35,11 @@ services:
         sync: false
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
+      - key: TELEGRAM_FILE_CHANNEL_ID
+        sync: false
+      - key: ADMIN_UPLOAD_TOKEN_SECRET
+        sync: false
+      - key: MAX_UPLOAD_BYTES
+        value: '49000000'
       - key: TELEGRAM_WEBHOOK_URL
         value: https://med-bot-api-ughi.onrender.com/api/v1/telegram/webhook

@@ -50,6 +50,11 @@ export class ContentController {
   ) {
     return this.content.list(query, actor);
   }
+  @Get('storage/status')
+  @RequirePermissions('content.read')
+  verifyStorage() {
+    return this.content.verifyStorage();
+  }
   @Get(':id')
   @RequirePermissions('content.read')
   get(@Param('id') id: string, @CurrentAdmin() actor: AuthenticatedAdmin) {
@@ -87,6 +92,12 @@ export class ContentController {
     @Req() request: Request,
   ) {
     return this.content.setState(id, input.state, actor, metadata(request));
+  }
+  @Post(':id/upload-ticket')
+  @UseGuards(CsrfGuard)
+  @RequirePermissions('content.update')
+  uploadTicket(@Param('id') id: string, @CurrentAdmin() actor: AuthenticatedAdmin) {
+    return this.content.issueUploadTicket(id, actor);
   }
   @Post(':id/attachments')
   @UseGuards(CsrfGuard)

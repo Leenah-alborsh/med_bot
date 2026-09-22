@@ -99,6 +99,9 @@ importers:
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
+      grammy:
+        specifier: ^1.38.2
+        version: 1.46.0
       multer:
         specifier: ^2.4.0
         version: 2.4.0

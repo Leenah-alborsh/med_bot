@@ -1,4 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { SUPER_ADMIN_ROLE_KEY } from '@medical/shared';
@@ -8,6 +10,8 @@ import { ScopeAuthorizationService } from '../auth/scope-authorization.service.j
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { AttachmentInput, ContentInput, ListContentInput } from './content.schemas.js';
 import { isPathInsideUploadRoot } from './upload.js';
+import { TelegramFileStorageService } from './telegram-file-storage.service.js';
+import { UploadTicketService } from './upload-ticket.service.js';
 
 type Actor = Pick<AuthenticatedAdmin, 'id' | 'roleKeys'>;
 const privateHost =
@@ -31,6 +35,8 @@ export class ContentService {
     private readonly prisma: PrismaService,
     private readonly scopes: ScopeAuthorizationService,
     private readonly audit: AuditService,
+    private readonly telegramStorage: TelegramFileStorageService,
+    private readonly uploadTickets: UploadTicketService,
   ) {}
 
   async list(query: ListContentInput, actor: Actor) {
@@ -84,6 +90,10 @@ export class ContentService {
             originalFilename: true,
             externalUrl: true,
             telegramFileId: true,
+            telegramFileUniqueId: true,
+            storageMessageId: true,
+            version: true,
+            isCurrent: true,
             mimeType: true,
             fileSize: true,
             createdAt: true,
@@ -247,40 +257,89 @@ export class ContentService {
     });
   }
 
+  async issueUploadTicket(id: string, actor: AuthenticatedAdmin) {
+    const target = await this.contentTarget(id);
+    await this.assertScope(actor, target.courseId, target.academicYearId);
+    return this.uploadTickets.issue(id, actor);
+  }
+
   async attachUpload(
     id: string,
     file: Express.Multer.File | undefined,
     actor: Actor,
     metadata: RequestMetadata,
   ) {
-    if (!file) throw new BadRequestException('A file is required');
+    if (!file) throw new BadRequestException('الملف مطلوب');
+    let stored: Awaited<ReturnType<TelegramFileStorageService['store']>> | undefined;
     try {
-      if (!isPathInsideUploadRoot(file.path)) throw new BadRequestException('Invalid upload path');
+      if (!isPathInsideUploadRoot(file.path)) throw new BadRequestException('مسار رفع غير صالح');
       const target = await this.contentTarget(id);
       await this.assertScope(actor, target.courseId, target.academicYearId);
-      const row = await this.prisma.contentAttachment.create({
-        data: {
-          contentItemId: id,
-          storageProvider: 'LOCAL',
-          originalFilename: basename(file.originalname),
-          storedPath: file.path,
-          mimeType: file.mimetype,
-          fileSize: BigInt(file.size),
-        },
+      const checksum = await this.checksum(file.path);
+      const duplicate = await this.prisma.contentAttachment.findFirst({
+        where: { contentItemId: id, checksum },
       });
-      await this.audit.record({
-        actorId: actor.id,
-        actionKey: 'content.attachment.upload',
-        entityType: 'ContentAttachment',
-        entityId: row.id,
-        after: this.serialize(row),
-        metadata,
+      if (duplicate) return this.serialize(duplicate);
+
+      stored = await this.telegramStorage.store(
+        file.path,
+        basename(file.originalname),
+        file.mimetype,
+      );
+      const row = await this.prisma.$transaction(async (tx) => {
+        const latest = await tx.contentAttachment.findFirst({
+          where: { contentItemId: id },
+          orderBy: { version: 'desc' },
+          select: { version: true },
+        });
+        await tx.contentAttachment.updateMany({
+          where: { contentItemId: id, isCurrent: true },
+          data: { isCurrent: false, archivedAt: new Date() },
+        });
+        const created = await tx.contentAttachment.create({
+          data: {
+            contentItemId: id,
+            storageProvider: 'TELEGRAM',
+            originalFilename: basename(file.originalname),
+            telegramFileId: stored!.telegramFileId,
+            telegramFileUniqueId: stored!.telegramFileUniqueId,
+            storageChatId: stored!.storageChatId,
+            storageMessageId: stored!.storageMessageId,
+            mimeType: file.mimetype,
+            fileSize: BigInt(file.size),
+            checksum,
+            version: (latest?.version ?? 0) + 1,
+            uploadedById: actor.id,
+          },
+        });
+        await this.audit.record({
+          actorId: actor.id,
+          actionKey: latest ? 'content.attachment.replace' : 'content.attachment.upload',
+          entityType: 'ContentAttachment',
+          entityId: created.id,
+          after: this.serialize(created),
+          metadata,
+          client: tx,
+        });
+        return created;
       });
       return this.serialize(row);
     } catch (error) {
-      await unlink(file.path).catch(() => undefined);
+      if (stored) await this.telegramStorage.compensate(stored);
       throw error;
+    } finally {
+      await unlink(file.path).catch(() => undefined);
     }
+  }
+
+  verifyStorage() {
+    return this.telegramStorage.verifyConfiguration();
+  }
+
+  private async checksum(path: string) {
+    const hash = createHash('sha256');
+    for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+    return hash.digest('hex');
   }
 
   private serialize<T>(value: T): T {

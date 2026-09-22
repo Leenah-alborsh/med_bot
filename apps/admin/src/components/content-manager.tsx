@@ -2,7 +2,7 @@
 import { Archive, Paperclip, Plus, Send } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
-import { clientApi } from '../lib/client-api';
+import { clientApi, clientUpload } from '../lib/client-api';
 type Item = {
   id: string;
   titleAr: string;
@@ -19,6 +19,7 @@ const stateLabels = { DRAFT: 'مسودة', PUBLISHED: 'منشور', ARCHIVED: '�
 export function ContentManager({ items, sections }: { items: Item[]; sections: Section[] }) {
   const router = useRouter();
   const [message, setMessage] = useState('');
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -69,13 +70,30 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
   }
   async function upload(id: string, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     try {
-      await clientApi(`content/${id}/attachments/upload`, { method: 'POST', body: data });
-      setMessage('تم رفع الملف.');
+      setUploadProgress((current) => ({ ...current, [id]: 0 }));
+      const { ticket } = await clientApi<{ ticket: string }>(`content/${id}/upload-ticket`, {
+        method: 'POST',
+      });
+      await clientUpload(
+        `content-upload/${id}`,
+        data,
+        (value) => setUploadProgress((current) => ({ ...current, [id]: value })),
+        ticket,
+      );
+      setMessage('تم رفع الملف وحفظه في مستودع Telegram.');
+      form.reset();
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'تعذر رفع الملف.');
+    } finally {
+      setUploadProgress((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
     }
   }
   return (
@@ -131,9 +149,18 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
                   <label>
                     <Paperclip size={16} />
                     <span>إرفاق ملف</span>
-                    <input name="file" type="file" required />
+                    <input
+                      name="file"
+                      type="file"
+                      accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,image/*,audio/*,video/mp4,video/webm"
+                      required
+                    />
                   </label>
-                  <button type="submit">رفع</button>
+                  <button type="submit" disabled={uploadProgress[item.id] !== undefined}>
+                    {uploadProgress[item.id] === undefined
+                      ? 'رفع'
+                      : `رفع ${uploadProgress[item.id]}%`}
+                  </button>
                 </form>
               )}
             </article>

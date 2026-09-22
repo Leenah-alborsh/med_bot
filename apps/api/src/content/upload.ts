@@ -6,6 +6,14 @@ import { diskStorage } from 'multer';
 
 const allowed = new Map([
   ['application/pdf', ['.pdf']],
+  ['application/msword', ['.doc']],
+  ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', ['.docx']],
+  ['application/vnd.ms-powerpoint', ['.ppt']],
+  ['application/vnd.openxmlformats-officedocument.presentationml.presentation', ['.pptx']],
+  ['application/vnd.ms-excel', ['.xls']],
+  ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ['.xlsx']],
+  ['application/zip', ['.zip']],
+  ['application/x-zip-compressed', ['.zip']],
   ['image/jpeg', ['.jpg', '.jpeg']],
   ['image/png', ['.png']],
   ['image/webp', ['.webp']],
@@ -30,7 +38,7 @@ export const uploadOptions = {
       callback(null, randomUUID() + extension);
     },
   }),
-  limits: { fileSize: Number(process.env.MAX_UPLOAD_BYTES ?? 26_214_400), files: 1 },
+  limits: { fileSize: Number(process.env.MAX_UPLOAD_BYTES ?? 49_000_000), files: 1 },
   fileFilter: (
     _request: Express.Request,
     file: Express.Multer.File,

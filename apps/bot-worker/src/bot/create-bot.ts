@@ -330,16 +330,18 @@ ${prompt}`
         id: selected.id,
         ...publishedContentWhere(membership.navigationSectionId!),
       },
-      include: { attachments: true },
+      include: { attachments: { where: { isCurrent: true }, orderBy: { version: 'desc' } } },
     });
     if (!item) return showMenu(ctx, membership, 'هذا المحتوى لم يعد متاحاً.');
 
+    let delivered = true;
     if (item.contentType === 'TEXT')
       await ctx.reply(item.bodyText ?? item.descriptionAr ?? item.titleAr);
     if (item.contentType === 'LINK') {
       const url = item.attachments.find(
         (attachment) => attachment.storageProvider === 'EXTERNAL_URL',
       )?.externalUrl;
+      if (!url) delivered = false;
       await ctx.reply(url ? item.titleAr : 'الرابط غير متاح حالياً.', {
         reply_markup: url ? externalUrlKeyboard(url) : undefined,
       });
@@ -353,19 +355,31 @@ ${prompt}`
           ? new InputFile(createReadStream(path), attachment.originalFilename)
           : null;
       }
-      if (!source) await ctx.reply('الملف غير متاح حالياً.');
-      else {
-        const message = await ctx.replyWithDocument(source, {
-          caption: item.titleAr,
-          reply_markup: brokenReportKeyboard(item.id),
-        });
-        if (attachment && !attachment.telegramFileId && message.document?.file_id)
-          await prisma.contentAttachment.update({
-            where: { id: attachment.id },
-            data: { telegramFileId: message.document.file_id },
+      if (!source) {
+        delivered = false;
+        await ctx.reply('الملف غير متاح حالياً.');
+      } else {
+        if (attachment?.storageChatId && attachment.storageMessageId) {
+          await ctx.api.copyMessage(
+            ctx.chat.id,
+            attachment.storageChatId.toString(),
+            attachment.storageMessageId,
+            { caption: item.titleAr, reply_markup: brokenReportKeyboard(item.id) },
+          );
+        } else {
+          const message = await ctx.replyWithDocument(source, {
+            caption: item.titleAr,
+            reply_markup: brokenReportKeyboard(item.id),
           });
+          if (attachment && !attachment.telegramFileId && message.document?.file_id)
+            await prisma.contentAttachment.update({
+              where: { id: attachment.id },
+              data: { telegramFileId: message.document.file_id },
+            });
+        }
       }
     }
+    if (!delivered) return;
     await prisma.contentAccessEvent.create({
       data: {
         studentId: student.id,
@@ -394,7 +408,7 @@ ${prompt}`
         isActive: true,
         archivedAt: null,
       },
-      include: { attachments: true },
+      include: { attachments: { where: { isCurrent: true }, orderBy: { version: 'desc' } } },
     });
     if (!item) return ctx.reply('تعذر العثور على الملف.');
     const recent = await prisma.brokenFileReport.findFirst({

@@ -23,7 +23,7 @@ async function bootstrap() {
   app.enableCors({
     origin: config.get('API_CORS_ORIGIN', { infer: true }),
     credentials: true,
-    allowedHeaders: ['Content-Type', 'X-CSRF-Token'],
+    allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Upload-Ticket'],
   });
   app.enableShutdownHooks();
 

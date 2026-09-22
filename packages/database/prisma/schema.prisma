@@ -214,28 +214,29 @@ model Section {
 }
 
 model AdminUser {
-  id                 String             @id @default(uuid()) @db.Uuid
-  email              String             @unique
-  passwordHash       String?
-  telegramUserId     BigInt?            @unique
-  displayNameAr      String
-  displayNameEn      String
-  status             AdminStatus        @default(PENDING)
-  mustChangePassword Boolean            @default(true)
-  lastLoginAt        DateTime?
-  failedLoginCount   Int                @default(0)
-  lockedUntil        DateTime?
-  passwordChangedAt  DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  roles              AdminRole[]
-  scopes             AdminScope[]
-  auditLogs          AuditLog[]
-  sessions           AdminSession[]
-  setupTokens        AdminSetupToken[]
-  createdContent     ContentItem[]      @relation("ContentCreatedBy")
-  updatedContent     ContentItem[]      @relation("ContentUpdatedBy")
-  reviewedReports    BrokenFileReport[] @relation("ReportReviewedBy")
+  id                  String              @id @default(uuid()) @db.Uuid
+  email               String              @unique
+  passwordHash        String?
+  telegramUserId      BigInt?             @unique
+  displayNameAr       String
+  displayNameEn       String
+  status              AdminStatus         @default(PENDING)
+  mustChangePassword  Boolean             @default(true)
+  lastLoginAt         DateTime?
+  failedLoginCount    Int                 @default(0)
+  lockedUntil         DateTime?
+  passwordChangedAt   DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  roles               AdminRole[]
+  scopes              AdminScope[]
+  auditLogs           AuditLog[]
+  sessions            AdminSession[]
+  setupTokens         AdminSetupToken[]
+  createdContent      ContentItem[]       @relation("ContentCreatedBy")
+  updatedContent      ContentItem[]       @relation("ContentUpdatedBy")
+  uploadedAttachments ContentAttachment[] @relation("AttachmentUploadedBy")
+  reviewedReports     BrokenFileReport[]  @relation("ReportReviewedBy")
 
   @@index([status])
 }
@@ -389,21 +390,31 @@ model ContentItem {
 }
 
 model ContentAttachment {
-  id               String             @id @default(uuid()) @db.Uuid
-  contentItemId    String             @db.Uuid
-  storageProvider  StorageProvider
-  originalFilename String
-  storedPath       String?
-  externalUrl      String?
-  telegramFileId   String?
-  mimeType         String
-  fileSize         BigInt
-  checksum         String?
-  createdAt        DateTime           @default(now())
-  contentItem      ContentItem        @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
-  reports          BrokenFileReport[]
+  id                   String             @id @default(uuid()) @db.Uuid
+  contentItemId        String             @db.Uuid
+  storageProvider      StorageProvider
+  originalFilename     String
+  storedPath           String?
+  externalUrl          String?
+  telegramFileId       String?
+  telegramFileUniqueId String?
+  storageChatId        BigInt?
+  storageMessageId     Int?
+  mimeType             String
+  fileSize             BigInt
+  checksum             String?
+  version              Int                @default(1)
+  isCurrent            Boolean            @default(true)
+  archivedAt           DateTime?
+  uploadedById         String?            @db.Uuid
+  createdAt            DateTime           @default(now())
+  contentItem          ContentItem        @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  uploadedBy           AdminUser?         @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  reports              BrokenFileReport[]
 
+  @@unique([contentItemId, checksum])
   @@index([contentItemId, storageProvider])
+  @@index([contentItemId, isCurrent, version])
 }
 
 model ContentAccessEvent {
