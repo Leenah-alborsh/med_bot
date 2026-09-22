@@ -157,11 +157,14 @@ button {
 .login-page {
   min-height: 100vh;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   padding: 24px;
 }
 .login-panel {
   width: min(440px, 100%);
+  min-width: 0;
+  max-width: 100%;
   padding: 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -669,6 +672,12 @@ code {
 @media (max-width: 640px) {
   h1 {
     font-size: 1.65rem;
+  }
+  .login-page {
+    padding: 16px;
+  }
+  .login-panel {
+    padding: 24px 20px;
   }
   .page {
     padding: 24px 15px 40px;
