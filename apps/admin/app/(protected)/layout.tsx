@@ -8,6 +8,7 @@ import {
   FileWarning,
   GraduationCap,
   LayoutDashboard,
+  Menu,
   ScrollText,
   ShieldCheck,
   Stethoscope,
@@ -86,7 +87,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           <span className="brand-mark">
             <Stethoscope size={22} />
           </span>
-          <span>منصة الطب</span>
+          <span>Medical Students Hub</span>
         </Link>
         <nav aria-label="التنقل الرئيسي">
           {nav
@@ -111,8 +112,25 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <header className="mobile-header">
           <Link className="brand" href="/dashboard">
             <Stethoscope size={21} />
-            <span>منصة الطب</span>
+            <span>Medical Students Hub</span>
           </Link>
+          <details className="mobile-nav">
+            <summary aria-label="فتح القائمة">
+              <Menu size={22} />
+              <span>القائمة</span>
+            </summary>
+            <nav aria-label="التنقل على الهاتف">
+              {nav
+                .filter((item) => item.show)
+                .map(({ href, label, icon: Icon }) => (
+                  <Link key={href} href={href}>
+                    <Icon size={18} />
+                    <span>{label}</span>
+                  </Link>
+                ))}
+              <LogoutButton />
+            </nav>
+          </details>
         </header>
         {children}
       </div>

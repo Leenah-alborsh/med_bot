@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentAdmin } from '../auth/current-admin.decorator.js';
 import type { AuthenticatedAdmin } from '../auth/auth.types.js';
@@ -125,5 +136,16 @@ export class CatalogController {
     @Req() request: Request,
   ) {
     return this.catalog.archive(kind, id, actor, metadata(request));
+  }
+  @Delete(':kind/:id')
+  @UseGuards(CsrfGuard)
+  @RequirePermissions('catalog.archive')
+  delete(
+    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section',
+    @Param('id') id: string,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Req() request: Request,
+  ) {
+    return this.catalog.delete(kind, id, actor, metadata(request));
   }
 }

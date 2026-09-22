@@ -1,6 +1,6 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { Archive, Plus } from 'lucide-react';
+import { Archive, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { clientApi } from '../lib/client-api';
 
@@ -67,6 +67,16 @@ export function CatalogManager({
       setMessage(error instanceof Error ? error.message : 'تعذرت الأرشفة.');
     }
   }
+  async function remove(id: string) {
+    if (!confirm('سيُحذف هذا العنصر نهائيًا. هل أنت متأكد؟')) return;
+    try {
+      await clientApi(`catalog/${kind.slice(0, -1)}/${id}`, { method: 'DELETE' });
+      setMessage('تم حذف العنصر.');
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذر حذف العنصر.');
+    }
+  }
   return (
     <main className="page">
       <header className="page-heading">
@@ -111,6 +121,14 @@ export function CatalogManager({
                       disabled={!item.isActive}
                     >
                       <Archive size={17} />
+                    </button>
+                    <button
+                      className="icon-button danger"
+                      title={item.isActive ? 'أرشف العنصر أولًا' : 'حذف نهائي'}
+                      onClick={() => void remove(item.id)}
+                      disabled={item.isActive}
+                    >
+                      <Trash2 size={17} />
                     </button>
                   </td>
                 </tr>

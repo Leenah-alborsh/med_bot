@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'إدارة منصة الطب',
-  description: 'لوحة إدارة منصة بوتات طلاب الطب',
+  title: 'Medical Students Hub - Admin',
+  description: 'لوحة إدارة بوت Medical Students Hub',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

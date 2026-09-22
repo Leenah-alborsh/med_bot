@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@medical/database';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@medical/database';
 import { SUPER_ADMIN_ROLE_KEY } from '@medical/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ScopeAuthorizationService } from '../auth/scope-authorization.service.js';
@@ -256,6 +256,41 @@ export class CatalogService {
     return this.update(kind, id, { isActive: false, archivedAt: new Date() }, actor, metadata);
   }
 
+  async delete(
+    kind: 'year' | 'semester' | 'course' | 'section',
+    id: string,
+    actor: Actor,
+    metadata: RequestMetadata,
+  ) {
+    const scope = await this.scopeForExisting(kind, id);
+    await this.scopes.assertResourceAccess(actor, scope);
+    return this.prisma.$transaction(async (tx) => {
+      const before = await this.findExisting(kind, id, tx);
+      if (before.isActive) throw new BadRequestException('يجب أرشفة العنصر قبل حذفه نهائيًا.');
+      try {
+        if (kind === 'year') await tx.academicYear.delete({ where: { id } });
+        else if (kind === 'semester') await tx.semester.delete({ where: { id } });
+        else if (kind === 'course') await tx.course.delete({ where: { id } });
+        else await tx.section.delete({ where: { id } });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003')
+          throw new BadRequestException(
+            'لا يمكن حذف العنصر لأنه مرتبط بعناصر أو محتوى آخر. احذف الارتباطات أولًا.',
+          );
+        throw error;
+      }
+      await this.audit.record({
+        actorId: actor.id,
+        actionKey: 'catalog.delete',
+        entityType: kind,
+        entityId: id,
+        before,
+        metadata,
+        client: tx,
+      });
+      return { deleted: true };
+    });
+  }
   private async mainBot() {
     const bot = await this.prisma.bot.findUnique({
       where: { key: 'medical-main' },

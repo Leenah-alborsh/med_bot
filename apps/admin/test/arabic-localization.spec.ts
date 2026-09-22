@@ -32,7 +32,7 @@ describe('Arabic admin localization', () => {
       'utf8',
     );
 
-    expect(layout).toContain('منصة الطب');
+    expect(layout).toContain('Medical Students Hub');
     expect(layout).toContain('المشرفون');
     expect(catalog).toContain('الاسم بالإنجليزية');
     expect(content).toContain('حفظ كمسودة');
