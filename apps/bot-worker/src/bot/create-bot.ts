@@ -334,50 +334,59 @@ ${prompt}`
     });
     if (!item) return showMenu(ctx, membership, 'هذا المحتوى لم يعد متاحاً.');
 
-    let delivered = true;
-    if (item.contentType === 'TEXT')
-      await ctx.reply(item.bodyText ?? item.descriptionAr ?? item.titleAr);
+    const description = item.descriptionAr ?? item.bodyText;
+    await ctx.reply([item.titleAr, description].filter(Boolean).join('\n\n'));
+
+    let delivered = item.contentType === 'TEXT';
     if (item.contentType === 'LINK') {
-      const url = item.attachments.find(
-        (attachment) => attachment.storageProvider === 'EXTERNAL_URL',
-      )?.externalUrl;
-      if (!url) delivered = false;
-      await ctx.reply(url ? item.titleAr : 'الرابط غير متاح حالياً.', {
-        reply_markup: url ? externalUrlKeyboard(url) : undefined,
-      });
+      const links = item.attachments.filter(
+        (attachment) => attachment.storageProvider === 'EXTERNAL_URL' && attachment.externalUrl,
+      );
+      if (!links.length) await ctx.reply('لا توجد روابط متاحة حالياً.');
+      for (const [index, attachment] of links.entries()) {
+        await ctx.reply(links.length > 1 ? `الرابط ${index + 1}` : 'فتح الرابط', {
+          reply_markup: externalUrlKeyboard(attachment.externalUrl!),
+        });
+        delivered = true;
+      }
     }
     if (item.contentType === 'FILE') {
-      const attachment = item.attachments[0];
-      let source: string | InputFile | null = attachment?.telegramFileId ?? null;
-      if (!source && allowLocalFiles && attachment?.storedPath) {
-        const path = resolve(attachment.storedPath);
-        source = existsSync(path)
-          ? new InputFile(createReadStream(path), attachment.originalFilename)
-          : null;
-      }
-      if (!source) {
-        delivered = false;
-        await ctx.reply('الملف غير متاح حالياً.');
-      } else {
-        if (attachment?.storageChatId && attachment.storageMessageId) {
+      const files = item.attachments.filter(
+        (attachment) => attachment.storageProvider === 'TELEGRAM' || attachment.storedPath,
+      );
+      if (!files.length) await ctx.reply('لا توجد ملفات متاحة حالياً.');
+      for (const [index, attachment] of files.entries()) {
+        let source: string | InputFile | null = attachment.telegramFileId ?? null;
+        if (!source && allowLocalFiles && attachment.storedPath) {
+          const path = resolve(attachment.storedPath);
+          source = existsSync(path)
+            ? new InputFile(createReadStream(path), attachment.originalFilename)
+            : null;
+        }
+        if (!source) continue;
+        const caption =
+          files.length > 1 ? `${item.titleAr} - ملف ${index + 1} من ${files.length}` : item.titleAr;
+        if (attachment.storageChatId && attachment.storageMessageId) {
           await ctx.api.copyMessage(
             ctx.chat.id,
             attachment.storageChatId.toString(),
             attachment.storageMessageId,
-            { caption: item.titleAr, reply_markup: brokenReportKeyboard(item.id) },
+            { caption, reply_markup: brokenReportKeyboard(item.id) },
           );
         } else {
           const message = await ctx.replyWithDocument(source, {
-            caption: item.titleAr,
+            caption,
             reply_markup: brokenReportKeyboard(item.id),
           });
-          if (attachment && !attachment.telegramFileId && message.document?.file_id)
+          if (!attachment.telegramFileId && message.document?.file_id)
             await prisma.contentAttachment.update({
               where: { id: attachment.id },
               data: { telegramFileId: message.document.file_id },
             });
         }
+        delivered = true;
       }
+      if (!delivered && files.length) await ctx.reply('تعذر إرسال الملفات حالياً.');
     }
     if (!delivered) return;
     await prisma.contentAccessEvent.create({

@@ -1,5 +1,16 @@
 'use client';
-import { Archive, Paperclip, Pencil, Plus, Save, Send, Trash2, X } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  Link2,
+  Paperclip,
+  Pencil,
+  Plus,
+  Save,
+  Send,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
@@ -13,7 +24,12 @@ type Item = {
   state: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   displayOrder: number;
   section: { nameAr: string; course: { nameAr: string } };
-  attachments: Array<{ id: string }>;
+  attachments: Array<{
+    id: string;
+    storageProvider: 'TELEGRAM' | 'EXTERNAL_URL';
+    originalFilename: string;
+    externalUrl?: string;
+  }>;
 };
 type Section = { id: string; nameAr: string };
 const contentTypeLabels = { TEXT: 'نص', LINK: 'رابط', FILE: 'ملف' } as const;
@@ -105,26 +121,79 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
       setMessage(error instanceof Error ? error.message : 'تعذر تحديث الحالة.');
     }
   }
-  async function upload(id: string, event: FormEvent<HTMLFormElement>) {
+  async function restore(id: string) {
+    try {
+      await clientApi(`content/${id}/state`, {
+        method: 'POST',
+        body: JSON.stringify({ state: 'DRAFT' }),
+      });
+      setMessage('تمت استعادة المحتوى كمسودة.');
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذرت استعادة المحتوى.');
+    }
+  }
+  async function addLink(id: string, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const rawUrl = data.get('externalUrl');
+    const url = typeof rawUrl === 'string' ? rawUrl.trim() : '';
     try {
-      setUploadProgress((current) => ({ ...current, [id]: 0 }));
-      const { ticket } = await clientApi<{ ticket: string }>(`content/${id}/upload-ticket`, {
+      await clientApi(`content/${id}/attachments`, {
         method: 'POST',
+        body: JSON.stringify({
+          storageProvider: 'EXTERNAL_URL',
+          originalFilename: 'external-link',
+          externalUrl: url,
+          mimeType: 'text/uri-list',
+          fileSize: 0,
+        }),
       });
-      await clientUpload(
-        `content-upload/${id}`,
-        data,
-        (value) => setUploadProgress((current) => ({ ...current, [id]: value })),
-        ticket,
+      form.reset();
+      setMessage('تمت إضافة الرابط.');
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذرت إضافة الرابط.');
+    }
+  }
+  async function upload(id: string, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const selected = form.elements.namedItem('file');
+    const files = selected instanceof HTMLInputElement ? Array.from(selected.files ?? []) : [];
+    if (!files.length) return;
+    try {
+      for (const [index, file] of files.entries()) {
+        const data = new FormData();
+        data.append('file', file);
+        setUploadProgress((current) => ({
+          ...current,
+          [id]: Math.round((index / files.length) * 100),
+        }));
+        const { ticket } = await clientApi<{ ticket: string }>(`content/${id}/upload-ticket`, {
+          method: 'POST',
+        });
+        await clientUpload(
+          `content-upload/${id}`,
+          data,
+          (value) =>
+            setUploadProgress((current) => ({
+              ...current,
+              [id]: Math.round(((index + value / 100) / files.length) * 100),
+            })),
+          ticket,
+        );
+      }
+      setMessage(
+        files.length > 1
+          ? `تم رفع ${files.length} ملفات وحفظها في Telegram.`
+          : 'تم رفع الملف وحفظه في Telegram.',
       );
-      setMessage('تم رفع الملف وحفظه في مستودع Telegram.');
       form.reset();
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'تعذر رفع الملف.');
+      setMessage(error instanceof Error ? error.message : 'تعذر رفع الملفات.');
     } finally {
       setUploadProgress((current) => {
         const next = { ...current };
@@ -149,146 +218,209 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
       )}
       <section className="workspace-grid content-workspace">
         <div className="content-list">
-          {items.map((item) => (
-            <article className="content-row" key={item.id}>
-              <div>
-                <div className="row-title">
-                  <strong>{item.titleAr}</strong>
-                  <span className="badge" data-state={item.state.toLowerCase()}>
-                    {stateLabels[item.state]}
+          {items
+            .filter((item) => item.state !== 'ARCHIVED')
+            .map((item) => (
+              <article className="content-row" key={item.id}>
+                <div>
+                  <div className="row-title">
+                    <strong>{item.titleAr}</strong>
+                    <span className="badge" data-state={item.state.toLowerCase()}>
+                      {stateLabels[item.state]}
+                    </span>
+                  </div>
+                  <span className="muted">
+                    {item.section.course.nameAr} / {item.section.nameAr} ·{' '}
+                    {contentTypeLabels[item.contentType]}
                   </span>
                 </div>
-                <span className="muted">
-                  {item.section.course.nameAr} / {item.section.nameAr} ·{' '}
-                  {contentTypeLabels[item.contentType]}
-                </span>
-              </div>
-              <div className="row-actions action-cluster">
-                <button
-                  className="icon-button"
-                  title="تعديل"
-                  aria-label="تعديل"
-                  onClick={() => setEditing(item)}
-                >
-                  <Pencil size={17} />
-                </button>
-                {item.state !== 'PUBLISHED' && (
+                <div className="row-actions action-cluster">
                   <button
-                    className="icon-button success"
-                    title="نشر"
-                    onClick={() => void state(item.id, 'PUBLISHED')}
+                    className="icon-button"
+                    title="تعديل"
+                    aria-label="تعديل"
+                    onClick={() => setEditing(item)}
                   >
-                    <Send size={17} />
-                  </button>
-                )}
-                <button
-                  className="icon-button archive"
-                  title="أرشفة"
-                  aria-label="أرشفة"
-                  onClick={() => void state(item.id, 'ARCHIVED')}
-                  disabled={item.state === 'ARCHIVED'}
-                >
-                  <Archive size={17} />
-                </button>
-                <button
-                  className="icon-button danger"
-                  title={item.state === 'ARCHIVED' ? 'حذف نهائي' : 'أرشف المحتوى أولًا'}
-                  aria-label="حذف نهائي"
-                  onClick={() => void remove(item.id)}
-                  disabled={item.state !== 'ARCHIVED'}
-                >
-                  <Trash2 size={17} />
-                </button>
-              </div>
-              {editing?.id === item.id && (
-                <form className="inline-editor form" onSubmit={saveEdit}>
-                  <div className="section-title">
                     <Pencil size={17} />
-                    <h2>تعديل المحتوى</h2>
+                  </button>
+                  {item.state !== 'PUBLISHED' && (
                     <button
-                      className="icon-button dismiss"
-                      type="button"
-                      title="إلغاء"
-                      onClick={() => setEditing(null)}
+                      className="icon-button success"
+                      title="نشر"
+                      onClick={() => void state(item.id, 'PUBLISHED')}
                     >
-                      <X size={17} />
+                      <Send size={17} />
                     </button>
-                  </div>
-                  <div className="compact-form-grid">
+                  )}
+                  <button
+                    className="icon-button archive"
+                    title="أرشفة"
+                    aria-label="أرشفة"
+                    onClick={() => void state(item.id, 'ARCHIVED')}
+                    disabled={item.state === 'ARCHIVED'}
+                  >
+                    <Archive size={17} />
+                  </button>
+                  <button
+                    className="icon-button danger"
+                    title={item.state === 'ARCHIVED' ? 'حذف نهائي' : 'أرشف المحتوى أولًا'}
+                    aria-label="حذف نهائي"
+                    onClick={() => void remove(item.id)}
+                    disabled={item.state !== 'ARCHIVED'}
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+                {editing?.id === item.id && (
+                  <form className="inline-editor form" onSubmit={saveEdit}>
+                    <div className="section-title">
+                      <Pencil size={17} />
+                      <h2>تعديل المحتوى</h2>
+                      <button
+                        className="icon-button dismiss"
+                        type="button"
+                        title="إلغاء"
+                        onClick={() => setEditing(null)}
+                      >
+                        <X size={17} />
+                      </button>
+                    </div>
+                    <div className="compact-form-grid">
+                      <label>
+                        القسم
+                        <select name="sectionId" defaultValue={editing.sectionId} required>
+                          {sections.map((section) => (
+                            <option key={section.id} value={section.id}>
+                              {section.nameAr}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        العنوان بالعربية
+                        <input name="titleAr" defaultValue={editing.titleAr} required />
+                      </label>
+                      <label>
+                        العنوان بالإنجليزية
+                        <input name="titleEn" defaultValue={editing.titleEn ?? ''} dir="ltr" />
+                      </label>
+                      <label>
+                        النوع
+                        <select name="contentType" defaultValue={editing.contentType}>
+                          <option value="TEXT">نص</option>
+                          <option value="LINK">رابط</option>
+                          <option value="FILE">ملف</option>
+                        </select>
+                      </label>
+                      <label>
+                        ترتيب العرض
+                        <input
+                          name="displayOrder"
+                          type="number"
+                          min="0"
+                          defaultValue={editing.displayOrder}
+                          required
+                        />
+                      </label>
+                    </div>
                     <label>
-                      القسم
-                      <select name="sectionId" defaultValue={editing.sectionId} required>
-                        {sections.map((section) => (
-                          <option key={section.id} value={section.id}>
-                            {section.nameAr}
-                          </option>
-                        ))}
-                      </select>
+                      النص أو الوصف
+                      <textarea name="bodyText" rows={4} defaultValue={editing.bodyText ?? ''} />
                     </label>
+                    <div className="form-actions">
+                      <button className="primary" type="submit">
+                        <Save size={17} /> حفظ التعديلات
+                      </button>
+                      <button type="button" onClick={() => setEditing(null)}>
+                        إلغاء
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {item.contentType === 'FILE' && (
+                  <form className="inline-upload" onSubmit={(event) => void upload(item.id, event)}>
                     <label>
-                      العنوان بالعربية
-                      <input name="titleAr" defaultValue={editing.titleAr} required />
-                    </label>
-                    <label>
-                      العنوان بالإنجليزية
-                      <input name="titleEn" defaultValue={editing.titleEn ?? ''} dir="ltr" />
-                    </label>
-                    <label>
-                      النوع
-                      <select name="contentType" defaultValue={editing.contentType}>
-                        <option value="TEXT">نص</option>
-                        <option value="LINK">رابط</option>
-                        <option value="FILE">ملف</option>
-                      </select>
-                    </label>
-                    <label>
-                      ترتيب العرض
+                      <Paperclip size={16} />
+                      <span>إرفاق ملف</span>
                       <input
-                        name="displayOrder"
-                        type="number"
-                        min="0"
-                        defaultValue={editing.displayOrder}
+                        name="file"
+                        type="file"
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,image/*,audio/*,video/mp4,video/webm"
+                        multiple
                         required
                       />
                     </label>
-                  </div>
-                  <label>
-                    النص أو الوصف
-                    <textarea name="bodyText" rows={4} defaultValue={editing.bodyText ?? ''} />
-                  </label>
-                  <div className="form-actions">
-                    <button className="primary" type="submit">
-                      <Save size={17} /> حفظ التعديلات
+                    <button type="submit" disabled={uploadProgress[item.id] !== undefined}>
+                      {uploadProgress[item.id] === undefined
+                        ? 'رفع'
+                        : `رفع ${uploadProgress[item.id]}%`}
                     </button>
-                    <button type="button" onClick={() => setEditing(null)}>
-                      إلغاء
-                    </button>
-                  </div>
-                </form>
-              )}
-              {item.contentType === 'FILE' && (
-                <form className="inline-upload" onSubmit={(event) => void upload(item.id, event)}>
-                  <label>
-                    <Paperclip size={16} />
-                    <span>إرفاق ملف</span>
-                    <input
-                      name="file"
-                      type="file"
-                      accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,image/*,audio/*,video/mp4,video/webm"
-                      required
-                    />
-                  </label>
-                  <button type="submit" disabled={uploadProgress[item.id] !== undefined}>
-                    {uploadProgress[item.id] === undefined
-                      ? 'رفع'
-                      : `رفع ${uploadProgress[item.id]}%`}
-                  </button>
-                </form>
-              )}
-            </article>
-          ))}
-          {!items.length && (
-            <div className="empty-state">لا يوجد محتوى بعد. ابدأ من النموذج المجاور.</div>
+                  </form>
+                )}
+                {item.contentType === 'LINK' && (
+                  <form
+                    className="inline-upload"
+                    onSubmit={(event) => void addLink(item.id, event)}
+                  >
+                    <label>
+                      <Link2 size={16} />
+                      <span>إضافة رابط آخر</span>
+                      <input
+                        name="externalUrl"
+                        type="url"
+                        dir="ltr"
+                        placeholder="https://"
+                        required
+                      />
+                    </label>
+                    <button type="submit">إضافة</button>
+                  </form>
+                )}
+                {!!item.attachments.length && (
+                  <small className="attachment-count">{item.attachments.length} مرفق</small>
+                )}
+              </article>
+            ))}
+          {!items.some((item) => item.state !== 'ARCHIVED') && (
+            <div className="empty-state">لا يوجد محتوى نشط. ابدأ من النموذج المجاور.</div>
+          )}
+          {items.some((item) => item.state === 'ARCHIVED') && (
+            <details className="archive-drawer">
+              <summary>
+                <Archive size={17} /> المحتوى المؤرشف{' '}
+                <span>{items.filter((item) => item.state === 'ARCHIVED').length}</span>
+              </summary>
+              <div className="archive-list">
+                {items
+                  .filter((item) => item.state === 'ARCHIVED')
+                  .map((item) => (
+                    <div className="archive-item" key={item.id}>
+                      <div>
+                        <strong>{item.titleAr}</strong>
+                        <small>
+                          {item.section.course.nameAr} / {item.section.nameAr}
+                        </small>
+                      </div>
+                      <div className="row-actions">
+                        <button
+                          className="icon-button success"
+                          title="استعادة كمسودة"
+                          onClick={() => void restore(item.id)}
+                        >
+                          <ArchiveRestore size={17} />
+                        </button>
+                        <button
+                          className="icon-button danger"
+                          title="حذف نهائي"
+                          onClick={() => void remove(item.id)}
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </details>
           )}
         </div>
         <form className="editor-panel form" onSubmit={create}>

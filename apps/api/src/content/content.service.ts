@@ -317,7 +317,15 @@ export class ContentService {
       const duplicate = await this.prisma.contentAttachment.findFirst({
         where: { contentItemId: id, checksum },
       });
-      if (duplicate) return this.serialize(duplicate);
+      if (duplicate) {
+        const restored = duplicate.isCurrent
+          ? duplicate
+          : await this.prisma.contentAttachment.update({
+              where: { id: duplicate.id },
+              data: { isCurrent: true, archivedAt: null },
+            });
+        return this.serialize(restored);
+      }
 
       stored = await this.telegramStorage.store(
         file.path,
@@ -329,10 +337,6 @@ export class ContentService {
           where: { contentItemId: id },
           orderBy: { version: 'desc' },
           select: { version: true },
-        });
-        await tx.contentAttachment.updateMany({
-          where: { contentItemId: id, isCurrent: true },
-          data: { isCurrent: false, archivedAt: new Date() },
         });
         const created = await tx.contentAttachment.create({
           data: {
@@ -352,7 +356,7 @@ export class ContentService {
         });
         await this.audit.record({
           actorId: actor.id,
-          actionKey: latest ? 'content.attachment.replace' : 'content.attachment.upload',
+          actionKey: 'content.attachment.upload',
           entityType: 'ContentAttachment',
           entityId: created.id,
           after: this.serialize(created),

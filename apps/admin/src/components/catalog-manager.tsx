@@ -1,6 +1,6 @@
 'use client';
 import { useState, type FormEvent } from 'react';
-import { Archive, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { clientApi } from '../lib/client-api';
 
@@ -88,6 +88,15 @@ export function CatalogManager({
       setMessage(error instanceof Error ? error.message : 'تعذرت الأرشفة.');
     }
   }
+  async function restore(id: string) {
+    try {
+      await clientApi(`catalog/${kind.slice(0, -1)}/${id}/restore`, { method: 'POST' });
+      setMessage('تمت استعادة العنصر.');
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذرت الاستعادة.');
+    }
+  }
   async function remove(id: string) {
     if (!confirm('سيُحذف هذا العنصر نهائيًا. هل أنت متأكد؟')) return;
     try {
@@ -122,53 +131,93 @@ export function CatalogManager({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <strong>{item.nameAr}</strong>
-                  </td>
-                  <td>{item.nameEn}</td>
-                  <td>{item.displayOrder}</td>
-                  <td>
-                    <span className="badge" data-state={item.isActive ? 'active' : 'inactive'}>
-                      {item.isActive ? 'نشط' : 'مؤرشف'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="row-actions action-cluster">
-                      <button
-                        className="icon-button"
-                        title="تعديل"
-                        aria-label="تعديل"
-                        onClick={() => setEditing(item)}
-                      >
-                        <Pencil size={17} />
-                      </button>
-                      <button
-                        className="icon-button archive"
-                        title="أرشفة"
-                        aria-label="أرشفة"
-                        onClick={() => void archive(item.id)}
-                        disabled={!item.isActive}
-                      >
-                        <Archive size={17} />
-                      </button>
-                      <button
-                        className="icon-button danger"
-                        title={item.isActive ? 'أرشف العنصر أولًا' : 'حذف نهائي'}
-                        aria-label="حذف نهائي"
-                        onClick={() => void remove(item.id)}
-                        disabled={item.isActive}
-                      >
-                        <Trash2 size={17} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {items
+                .filter((item) => item.isActive)
+                .map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <strong>{item.nameAr}</strong>
+                    </td>
+                    <td>{item.nameEn}</td>
+                    <td>{item.displayOrder}</td>
+                    <td>
+                      <span className="badge" data-state={item.isActive ? 'active' : 'inactive'}>
+                        {item.isActive ? 'نشط' : 'مؤرشف'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="row-actions action-cluster">
+                        <button
+                          className="icon-button"
+                          title="تعديل"
+                          aria-label="تعديل"
+                          onClick={() => setEditing(item)}
+                        >
+                          <Pencil size={17} />
+                        </button>
+                        <button
+                          className="icon-button archive"
+                          title="أرشفة"
+                          aria-label="أرشفة"
+                          onClick={() => void archive(item.id)}
+                          disabled={!item.isActive}
+                        >
+                          <Archive size={17} />
+                        </button>
+                        <button
+                          className="icon-button danger"
+                          title={item.isActive ? 'أرشف العنصر أولًا' : 'حذف نهائي'}
+                          aria-label="حذف نهائي"
+                          onClick={() => void remove(item.id)}
+                          disabled={item.isActive}
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
-          {!items.length && <div className="empty-state">لا توجد عناصر حتى الآن.</div>}
+          {!items.some((item) => item.isActive) && (
+            <div className="empty-state">لا توجد عناصر نشطة حتى الآن.</div>
+          )}
+          {items.some((item) => !item.isActive) && (
+            <details className="archive-drawer">
+              <summary>
+                <Archive size={17} /> المؤرشفة{' '}
+                <span>{items.filter((item) => !item.isActive).length}</span>
+              </summary>
+              <div className="archive-list">
+                {items
+                  .filter((item) => !item.isActive)
+                  .map((item) => (
+                    <div className="archive-item" key={item.id}>
+                      <div>
+                        <strong>{item.nameAr}</strong>
+                        <small>{item.nameEn}</small>
+                      </div>
+                      <div className="row-actions">
+                        <button
+                          className="icon-button success"
+                          title="استعادة"
+                          onClick={() => void restore(item.id)}
+                        >
+                          <ArchiveRestore size={17} />
+                        </button>
+                        <button
+                          className="icon-button danger"
+                          title="حذف نهائي"
+                          onClick={() => void remove(item.id)}
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </details>
+          )}
         </div>
         {editing && (
           <form className="editor-panel form edit-panel" onSubmit={saveEdit}>

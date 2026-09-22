@@ -10,7 +10,12 @@ type Item = {
   state: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   displayOrder: number;
   section: { nameAr: string; course: { nameAr: string } };
-  attachments: Array<{ id: string }>;
+  attachments: Array<{
+    id: string;
+    storageProvider: 'TELEGRAM' | 'EXTERNAL_URL';
+    originalFilename: string;
+    externalUrl?: string;
+  }>;
 };
 type Section = { id: string; nameAr: string };
 export default async function Page() {

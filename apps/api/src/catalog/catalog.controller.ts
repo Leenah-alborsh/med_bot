@@ -137,6 +137,18 @@ export class CatalogController {
   ) {
     return this.catalog.archive(kind, id, actor, metadata(request));
   }
+  @Post(':kind/:id/restore')
+  @UseGuards(CsrfGuard)
+  @RequirePermissions('catalog.update')
+  restore(
+    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section',
+    @Param('id') id: string,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Req() request: Request,
+  ) {
+    return this.catalog.restore(kind, id, actor, metadata(request));
+  }
+
   @Delete(':kind/:id')
   @UseGuards(CsrfGuard)
   @RequirePermissions('catalog.archive')

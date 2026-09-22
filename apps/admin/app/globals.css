@@ -893,3 +893,65 @@ code {
     flex-direction: column;
   }
 }
+
+.archive-drawer {
+  border-top: 1px solid var(--line);
+  background: #f8fafb;
+}
+.archive-drawer summary {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  color: #40566a;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.archive-drawer summary::-webkit-details-marker {
+  display: none;
+}
+.archive-drawer summary span {
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e1e8ee;
+  font-size: 0.78rem;
+  text-align: center;
+}
+.archive-list {
+  display: grid;
+  gap: 1px;
+  border-top: 1px solid var(--line);
+  background: var(--line);
+}
+.archive-item {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  background: #fff;
+}
+.archive-item > div:first-child {
+  min-width: 0;
+  display: grid;
+}
+.archive-item small,
+.attachment-count {
+  color: var(--muted);
+}
+.attachment-count {
+  grid-column: 1 / -1;
+  font-size: 0.78rem;
+}
+@media (max-width: 640px) {
+  .archive-item {
+    align-items: flex-start;
+  }
+  .archive-item .row-actions {
+    width: auto;
+  }
+}

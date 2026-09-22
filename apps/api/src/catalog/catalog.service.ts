@@ -256,6 +256,15 @@ export class CatalogService {
     return this.update(kind, id, { isActive: false, archivedAt: new Date() }, actor, metadata);
   }
 
+  async restore(
+    kind: 'year' | 'semester' | 'course' | 'section',
+    id: string,
+    actor: Actor,
+    metadata: RequestMetadata,
+  ) {
+    return this.update(kind, id, { isActive: true, archivedAt: null }, actor, metadata);
+  }
+
   async delete(
     kind: 'year' | 'semester' | 'course' | 'section',
     id: string,
