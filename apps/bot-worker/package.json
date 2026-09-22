@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "./dist/src/bot/create-bot.js",
+  "types": "./src/bot/create-bot.ts",
+  "exports": {
+    ".": {
+      "types": "./src/bot/create-bot.ts",
+      "import": "./dist/src/bot/create-bot.js"
+    }
+  },
   "scripts": {
     "dev": "dotenv -e ../../.env -e ../../.env.example -- tsx watch src/main.ts",
     "build": "tsc -p tsconfig.json",

@@ -13,6 +13,7 @@ import { CatalogModule } from './catalog/catalog.module.js';
 import { ContentModule } from './content/content.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { AuditController } from './audit/audit.controller.js';
+import { TelegramModule } from './telegram/telegram.module.js';
 
 @Module({
   controllers: [AuditController],
@@ -32,6 +33,7 @@ import { AuditController } from './audit/audit.controller.js';
     ContentModule,
     ReportsModule,
     HealthModule,
+    TelegramModule,
   ],
 })
 export class AppModule implements NestModule {

@@ -29,6 +29,10 @@ async function main() {
     uploadDirectory: config.UPLOAD_DIRECTORY,
   });
   await bot.init();
+  const webhook = await bot.api.getWebhookInfo();
+  if (webhook.url) {
+    throw new Error('Telegram webhook is configured; polling cannot run at the same time.');
+  }
   await prisma.bot.update({
     where: { key: 'medical-main' },
     data: { telegramUsername: bot.botInfo.username, status: 'ACTIVE' },

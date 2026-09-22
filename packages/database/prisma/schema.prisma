@@ -421,6 +421,14 @@ model ContentAccessEvent {
   @@index([contentItemId, eventType, createdAt])
 }
 
+model TelegramWebhookUpdate {
+  updateId    BigInt    @id
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([processedAt, receivedAt])
+}
+
 model BrokenFileReport {
   id             String                 @id @default(uuid()) @db.Uuid
   studentId      String                 @db.Uuid

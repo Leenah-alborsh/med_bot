@@ -13,6 +13,7 @@
     "admin:bootstrap": "dotenv -e ../../.env -e ../../.env.example -- tsx src/bootstrap-super-admin.ts"
   },
   "dependencies": {
+    "@medical/bot-worker": "workspace:*",
     "@medical/database": "workspace:*",
     "@medical/shared": "workspace:*",
     "@nestjs/common": "^10.4.15",

@@ -15,7 +15,12 @@ import {
   type NavigationLevel,
 } from './navigation.js';
 
-type Options = { token: string; prisma: PrismaClient; uploadDirectory: string };
+type Options = {
+  token: string;
+  prisma: PrismaClient;
+  uploadDirectory: string;
+  allowLocalFiles?: boolean;
+};
 type Membership = Awaited<ReturnType<PrismaClient['studentBotMembership']['upsert']>>;
 type Identity = {
   student: Awaited<ReturnType<PrismaClient['student']['upsert']>>;
@@ -50,7 +55,7 @@ const promptFor = (level: NavigationLevel, hasOptions: boolean) => {
   }[level];
 };
 
-export function createMedicalBot({ token, prisma }: Options) {
+export function createMedicalBot({ token, prisma, allowLocalFiles = true }: Options) {
   const bot = new Bot(token);
 
   const identify = async (ctx: Context): Promise<Identity> => {
@@ -342,7 +347,7 @@ ${prompt}`
     if (item.contentType === 'FILE') {
       const attachment = item.attachments[0];
       let source: string | InputFile | null = attachment?.telegramFileId ?? null;
-      if (!source && attachment?.storedPath) {
+      if (!source && allowLocalFiles && attachment?.storedPath) {
         const path = resolve(attachment.storedPath);
         source = existsSync(path)
           ? new InputFile(createReadStream(path), attachment.originalFilename)

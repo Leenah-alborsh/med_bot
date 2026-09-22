@@ -8,7 +8,7 @@ services:
     branch: master
     autoDeployTrigger: commit
     healthCheckPath: /api/v1/health
-    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile --prod=false && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/api build
+    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile --prod=false && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/bot-worker build && pnpm --filter @medical/api build
     startCommand: pnpm --filter @medical/api start
     envVars:
       - key: NODE_VERSION
@@ -29,31 +29,11 @@ services:
         value: 'false'
       - key: LOG_LEVEL
         value: info
-
-  - type: worker
-    name: med-bot-worker
-    runtime: node
-    repo: https://github.com/Leenah-alborsh/med_bot
-    plan: starter
-    region: frankfurt
-    branch: master
-    autoDeployTrigger: commit
-    numInstances: 1
-    maxShutdownDelaySeconds: 60
-    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile --prod=false && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/bot-worker build
-    startCommand: pnpm --filter @medical/bot-worker start
-    envVars:
-      - key: NODE_VERSION
-        value: 22.11.0
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        sync: false
-      - key: NEON_DIRECT_URL
-        sync: false
-      - key: BOT_WORKER_ENABLED
+      - key: TELEGRAM_WEBHOOK_ENABLED
         value: 'true'
       - key: MEDICAL_BOT_TOKEN
         sync: false
-      - key: UPLOAD_DIRECTORY
-        value: /tmp/medical-bot-uploads
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: TELEGRAM_WEBHOOK_URL
+        value: https://med-bot-api-ughi.onrender.com/api/v1/telegram/webhook
