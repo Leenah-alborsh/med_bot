@@ -3,6 +3,7 @@ import { z } from 'zod';
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().url(),
+  PORT: z.coerce.number().int().positive().optional(),
   API_PORT: z.coerce.number().int().positive().default(3001),
   API_PREFIX: z.string().min(1).default('api'),
   API_CORS_ORIGIN: z.string().default('http://localhost:3000'),

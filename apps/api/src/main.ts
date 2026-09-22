@@ -39,9 +39,10 @@ async function bootstrap() {
     SwaggerModule.setup(`${apiPrefix}/docs`, app, document);
   }
 
-  const port = config.get('API_PORT', { infer: true });
-  await app.listen(port);
-  logger.log(`API listening on http://localhost:${port}/${apiPrefix}`);
+  const port =
+    config.get('PORT', { infer: true }) ?? config.get('API_PORT', { infer: true }) ?? 3001;
+  await app.listen(port, '0.0.0.0');
+  logger.log(`API listening on port ${port} with prefix /${apiPrefix}`);
 }
 
 void bootstrap();

@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: med-bot-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: master
+    autoDeployTrigger: commit
+    healthCheckPath: /api/v1/health
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/api build
+    startCommand: pnpm --filter @medical/api start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: NEON_DIRECT_URL
+        sync: false
+      - key: API_PREFIX
+        value: api
+      - key: API_CORS_ORIGIN
+        value: https://med-bot-admin.vercel.app
+      - key: ADMIN_SESSION_TTL_SECONDS
+        value: 43200
+      - key: SWAGGER_ENABLED
+        value: 'false'
+      - key: LOG_LEVEL
+        value: info
+
+  - type: worker
+    name: med-bot-worker
+    runtime: node
+    plan: starter
+    region: frankfurt
+    branch: master
+    autoDeployTrigger: commit
+    numInstances: 1
+    maxShutdownDelaySeconds: 60
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/bot-worker build
+    startCommand: pnpm --filter @medical/bot-worker start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: NEON_DIRECT_URL
+        sync: false
+      - key: BOT_WORKER_ENABLED
+        value: 'true'
+      - key: MEDICAL_BOT_TOKEN
+        sync: false
+      - key: UPLOAD_DIRECTORY
+        value: /tmp/medical-bot-uploads

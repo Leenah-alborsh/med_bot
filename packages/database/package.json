@@ -21,6 +21,7 @@
     "db:format": "dotenv -e ../../.env -e ../../.env.example -- prisma format --config prisma.config.ts",
     "db:validate": "dotenv -e ../../.env -e ../../.env.example -- prisma validate --config prisma.config.ts",
     "db:migrate": "dotenv -e ../../.env -e ../../.env.example -- prisma migrate dev --config prisma.config.ts",
+    "db:migrate:deploy": "prisma migrate deploy --config prisma.config.ts",
     "db:seed": "dotenv -e ../../.env -e ../../.env.example -- prisma db seed --config prisma.config.ts"
   },
   "dependencies": {
