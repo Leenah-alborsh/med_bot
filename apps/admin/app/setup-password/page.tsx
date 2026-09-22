@@ -1,14 +1,21 @@
 import { SetupPasswordForm } from './setup-password-form';
-export default function SetupPasswordPage() {
+
+export default async function SetupPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ token?: string }>;
+}) {
+  const { token } = await searchParams;
   return (
     <main className="login-page">
       <section className="login-panel">
-        <p className="eyebrow">إعداد الحساب</p>
-        <h1>اختيار كلمة المرور</h1>
+        <p className="eyebrow">دعوة مشرف جديد</p>
+        <h1>إعداد كلمة المرور</h1>
         <p className="muted">
-          ألصق بيانات الإعداد التي سلّمها لك المشرف العام. لا تُرسل هذه القيمة في رابط.
+          اختر كلمة مرور خاصة بك. رابط الدعوة صالح لمرة واحدة فقط، وبعدها يمكنك الدخول من صفحة
+          الإدارة المعتادة.
         </p>
-        <SetupPasswordForm />
+        <SetupPasswordForm token={token} />
       </section>
     </main>
   );

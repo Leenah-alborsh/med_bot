@@ -1,18 +1,19 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getCurrentAdmin, hasPermission, serverApi } from '../../../src/lib/server-api';
 import { AdminCreateForm } from '../../../src/components/admin-create-form';
+import { getCurrentAdmin, hasPermission, serverApi } from '../../../src/lib/server-api';
 
 const statusLabels: Record<string, string> = {
   ACTIVE: 'نشط',
-  PENDING: 'بانتظار التفعيل',
-  DISABLED: 'معطل',
+  PENDING: 'بانتظار إعداد كلمة المرور',
+  DISABLED: 'معطّل',
 };
 interface AdminRow {
   id: string;
   email: string;
   displayNameAr: string;
   status: string;
+  mustChangePassword: boolean;
   roles: Array<{ id: string; nameAr: string }>;
 }
 interface Role {
@@ -20,6 +21,7 @@ interface Role {
   nameAr: string;
   nameEn: string;
 }
+
 export default async function AdminsPage({
   searchParams,
 }: {
@@ -35,12 +37,13 @@ export default async function AdminsPage({
   ]);
   return (
     <main className="page">
-      <div className="page-heading">
+      <header className="page-heading">
         <div>
           <p className="eyebrow">إدارة الوصول</p>
           <h1>المشرفون</h1>
+          <p className="muted">إضافة المشرفين، دعوتهم، وتحديد صلاحيات كل حساب.</p>
         </div>
-      </div>
+      </header>
       <form className="search" method="get">
         <label className="sr-only" htmlFor="search">
           بحث
@@ -58,9 +61,11 @@ export default async function AdminsPage({
           <thead>
             <tr>
               <th>المشرف</th>
-              <th>الحالة</th>
+              <th>حالة الدخول</th>
               <th>الأدوار</th>
-              <th></th>
+              <th>
+                <span className="sr-only">إدارة</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -70,11 +75,24 @@ export default async function AdminsPage({
                   <strong>{item.displayNameAr}</strong>
                   <span className="table-subtitle">{item.email}</span>
                 </td>
-                <td>{statusLabels[item.status] ?? item.status}</td>
+                <td>
+                  <span
+                    className="badge"
+                    data-state={
+                      item.status === 'ACTIVE'
+                        ? 'active'
+                        : item.status === 'PENDING'
+                          ? 'draft'
+                          : 'inactive'
+                    }
+                  >
+                    {statusLabels[item.status] ?? item.status}
+                  </span>
+                </td>
                 <td>{item.roles.map((role) => role.nameAr).join('، ') || 'بدون دور'}</td>
                 <td>
-                  <Link className="link" href={`/admins/${item.id}`}>
-                    إدارة
+                  <Link className="secondary-link" href={`/admins/${item.id}`}>
+                    إدارة الحساب
                   </Link>
                 </td>
               </tr>
@@ -82,7 +100,7 @@ export default async function AdminsPage({
           </tbody>
         </table>
       </div>
-      <p className="muted">{result.total} حساباً</p>
+      <p className="muted">{result.total} حساب</p>
       {hasPermission(admin, 'admins.create') && <AdminCreateForm roles={roles} />}
     </main>
   );

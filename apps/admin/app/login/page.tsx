@@ -2,7 +2,11 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { LoginForm } from './login-form';
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ setup?: string }>;
+}) {
   const cookieStore = await cookies();
   if (cookieStore.has('med_admin_session')) {
     const base =
@@ -15,13 +19,14 @@ export default async function LoginPage() {
     }).catch(() => null);
     if (response?.ok) redirect('/dashboard');
   }
+  const { setup } = await searchParams;
   return (
     <main className="login-page">
       <section className="login-panel" aria-labelledby="login-title">
-        <p className="eyebrow">منصة طلاب الطب</p>
+        <p className="eyebrow">Medical Students Hub</p>
         <h1 id="login-title">تسجيل دخول الإدارة</h1>
-        <p className="muted">أدخل بيانات حسابك الإداري للمتابعة.</p>
-        <LoginForm />
+        <p className="muted">استخدم البريد الإلكتروني وكلمة المرور الخاصة بحسابك الإداري.</p>
+        <LoginForm setupComplete={setup === 'success'} />
       </section>
     </main>
   );

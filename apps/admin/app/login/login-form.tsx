@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { LogIn } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { clientApi } from '../../src/lib/client-api';
 
-export function LoginForm() {
+export function LoginForm({ setupComplete = false }: { setupComplete?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,30 +23,36 @@ export function LoginForm() {
       router.replace('/dashboard');
       router.refresh();
     } catch {
-      setError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+      setError('البريد الإلكتروني أو كلمة المرور غير صحيحة.');
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form className="form" onSubmit={submit}>
-      <label>
-        البريد الإلكتروني
-        <input name="email" type="email" autoComplete="username" required />
-      </label>
-      <label>
-        كلمة المرور
-        <input name="password" type="password" autoComplete="current-password" required />
-      </label>
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
+    <>
+      {setupComplete && (
+        <p className="notice">تم تفعيل الحساب. سجّل الدخول بالبريد وكلمة المرور الجديدة.</p>
       )}
-      <button className="primary" disabled={loading} type="submit">
-        {loading ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
-      </button>
-    </form>
+      <form className="form" onSubmit={submit}>
+        <label>
+          البريد الإلكتروني
+          <input name="email" type="email" autoComplete="username" required />
+        </label>
+        <label>
+          كلمة المرور
+          <input name="password" type="password" autoComplete="current-password" required />
+        </label>
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="primary" disabled={loading} type="submit">
+          <LogIn size={17} />
+          {loading ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
+        </button>
+      </form>
+    </>
   );
 }

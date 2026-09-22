@@ -955,3 +955,61 @@ code {
     width: auto;
   }
 }
+
+.admin-create,
+.account-actions {
+  margin-top: 28px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.invitation-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #8fc9b0;
+  border-right: 4px solid var(--success);
+  border-radius: 7px;
+  background: #f0faf5;
+}
+.invitation-panel > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--success);
+}
+.invitation-panel p,
+.invitation-panel small {
+  margin: 0;
+}
+.invitation-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.invitation-link input {
+  background: #fff;
+  font-size: 0.82rem;
+}
+.invitation-link button,
+.account-actions .actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.secondary-link {
+  color: var(--blue);
+  font-weight: 700;
+}
+.stack {
+  display: grid;
+  gap: 20px;
+}
+@media (max-width: 640px) {
+  .invitation-link {
+    grid-template-columns: 1fr;
+  }
+}
