@@ -8,7 +8,7 @@ services:
     branch: master
     autoDeployTrigger: commit
     healthCheckPath: /api/v1/health
-    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/api build
+    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile --prod=false && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/api build
     startCommand: pnpm --filter @medical/api start
     envVars:
       - key: NODE_VERSION
@@ -40,7 +40,7 @@ services:
     autoDeployTrigger: commit
     numInstances: 1
     maxShutdownDelaySeconds: 60
-    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/bot-worker build
+    buildCommand: npm install --global pnpm@9.15.4 && pnpm install --frozen-lockfile --prod=false && pnpm --filter @medical/shared build && pnpm --filter @medical/database build && pnpm --filter @medical/bot-worker build
     startCommand: pnpm --filter @medical/bot-worker start
     envVars:
       - key: NODE_VERSION
