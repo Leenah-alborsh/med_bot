@@ -39,6 +39,18 @@ describe('authorization', () => {
     );
   });
 
+  it('treats no resource scopes as global for secondary admins', async () => {
+    const service = new ScopeAuthorizationService({
+      adminScope: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService);
+    await expect(
+      service.assertResourceAccess(
+        { id: 'secondary', roleKeys: ['content-admin'] },
+        { botId: 'bot', academicYearId: 'year', courseId: 'course' },
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it('allows Super Admin globally and requires matching nested scope for secondary admins', async () => {
     const findMany = vi
       .fn()

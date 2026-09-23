@@ -42,6 +42,7 @@ export class ScopeAuthorizationService {
       where: { adminUserId: admin.id },
       select: { botId: true, academicYearId: true, courseId: true },
     });
+    if (scopes.length === 0) return;
     const allowed = scopes.some(
       (scope) =>
         (scope.botId === null || scope.botId === resource.botId) &&

@@ -21,6 +21,7 @@ export class CatalogService {
   private async visible<T extends ScopedRow>(actor: Actor, rows: T[]) {
     if (actor.roleKeys.includes(SUPER_ADMIN_ROLE_KEY)) return rows;
     const scopes = await this.prisma.adminScope.findMany({ where: { adminUserId: actor.id } });
+    if (scopes.length === 0) return rows;
     return rows.filter((row) =>
       scopes.some(
         (scope) =>

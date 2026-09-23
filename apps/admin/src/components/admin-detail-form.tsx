@@ -18,14 +18,22 @@ interface Role {
   id: string;
   nameAr: string;
 }
+interface ScopeOption {
+  id: string;
+  nameAr: string;
+}
 
 export function AdminDetailForm({
   admin,
   roles,
+  years,
+  courses,
   currentAdminId,
 }: {
   admin: Admin;
   roles: Role[];
+  years: ScopeOption[];
+  courses: ScopeOption[];
   currentAdminId: string;
 }) {
   const router = useRouter();
@@ -71,17 +79,10 @@ export function AdminDetailForm({
   async function assignScopes(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const ids = (name: string) => {
-      const value = data.get(name);
-      return (typeof value === 'string' ? value : '')
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-    };
     await run(`admins/${admin.id}/scopes`, {
-      botIds: ids('botIds'),
-      academicYearIds: ids('academicYearIds'),
-      courseIds: ids('courseIds'),
+      botIds: [],
+      academicYearIds: data.getAll('academicYearIds'),
+      courseIds: data.getAll('courseIds'),
     });
   }
   async function regenerate() {
@@ -140,42 +141,45 @@ export function AdminDetailForm({
         ))}
         <button type="submit">حفظ الأدوار</button>
       </form>
-      <form className="form" onSubmit={assignScopes}>
-        <h2>نطاق الوصول</h2>
+      <form className="form scope-editor" onSubmit={assignScopes}>
+        <h2>نطاق البيانات</h2>
         <p className="muted">
-          اترك الحقول فارغة للوصول العام ضمن الصلاحيات، أو أدخل المعرّفات مفصولة بفواصل.
+          عدم اختيار أي نطاق يعني أن المشرف يرى كل البيانات التي يسمح بها دوره. اختر سنوات أو مواد
+          لتقييد ما يظهر له.
         </p>
-        <label>
-          معرّفات البوتات
-          <input
-            name="botIds"
-            defaultValue={admin.scopes
-              .map((s) => s.botId)
-              .filter(Boolean)
-              .join(', ')}
-          />
-        </label>
-        <label>
-          معرّفات السنوات
-          <input
-            name="academicYearIds"
-            defaultValue={admin.scopes
-              .map((s) => s.academicYearId)
-              .filter(Boolean)
-              .join(', ')}
-          />
-        </label>
-        <label>
-          معرّفات المواد
-          <input
-            name="courseIds"
-            defaultValue={admin.scopes
-              .map((s) => s.courseId)
-              .filter(Boolean)
-              .join(', ')}
-          />
-        </label>
-        <button type="submit">حفظ نطاق الوصول</button>
+        <fieldset>
+          <legend>السنوات المسموحة</legend>
+          <div className="scope-options">
+            {years.map((year) => (
+              <label className="check" key={year.id}>
+                <input
+                  name="academicYearIds"
+                  type="checkbox"
+                  value={year.id}
+                  defaultChecked={admin.scopes.some((scope) => scope.academicYearId === year.id)}
+                />
+                {year.nameAr}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>المواد المسموحة</legend>
+          <div className="scope-options">
+            {courses.map((course) => (
+              <label className="check" key={course.id}>
+                <input
+                  name="courseIds"
+                  type="checkbox"
+                  value={course.id}
+                  defaultChecked={admin.scopes.some((scope) => scope.courseId === course.id)}
+                />
+                {course.nameAr}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <button type="submit">حفظ نطاق البيانات</button>
       </form>
       <section className="account-actions">
         <h2>الدخول والحساب</h2>
