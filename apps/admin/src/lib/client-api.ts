@@ -20,6 +20,8 @@ export async function clientApi<T>(path: string, init: RequestInit = {}): Promis
   });
   const body = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
   if (!response.ok) throw new Error(body.error?.message ?? 'تعذر إتمام الطلب');
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method))
+    window.dispatchEvent(new Event('admin-action-completed'));
   return body as T;
 }
 

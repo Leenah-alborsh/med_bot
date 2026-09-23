@@ -38,7 +38,7 @@ export const uploadOptions = {
       callback(null, randomUUID() + extension);
     },
   }),
-  limits: { fileSize: Number(process.env.MAX_UPLOAD_BYTES ?? 49_000_000), files: 1 },
+  limits: { fileSize: Number(process.env.MAX_UPLOAD_BYTES ?? 50_000_000), files: 1 },
   fileFilter: (
     _request: Express.Request,
     file: Express.Multer.File,

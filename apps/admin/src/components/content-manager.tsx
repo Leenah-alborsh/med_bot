@@ -96,6 +96,10 @@ export function ContentManager({
       (!filterCategoryId || item.contentCategoryId === filterCategoryId),
   );
   async function uploadFiles(id: string, files: File[], progressKey: string) {
+    const oversized = files.find((file) => file.size > 50_000_000);
+    if (oversized) {
+      throw new Error(`الملف ${oversized.name} يتجاوز الحد الأقصى المسموح 50MB.`);
+    }
     for (const [index, file] of files.entries()) {
       const payload = new FormData();
       payload.append('file', file);

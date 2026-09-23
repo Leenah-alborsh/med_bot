@@ -28,7 +28,7 @@ const environmentSchema = z
       .regex(/^-100[0-9]+$/)
       .optional(),
     ADMIN_UPLOAD_TOKEN_SECRET: z.string().min(32).max(256).optional(),
-    MAX_UPLOAD_BYTES: z.coerce.number().int().min(1).max(52_428_800).default(49_000_000),
+    MAX_UPLOAD_BYTES: z.coerce.number().int().min(1).max(52_428_800).default(50_000_000),
     UPLOAD_DIRECTORY: z.string().trim().min(1).default('./var/uploads'),
   })
   .superRefine((environment, context) => {

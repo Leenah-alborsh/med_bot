@@ -1081,3 +1081,23 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+.action-history-controls {
+  position: fixed;
+  top: 16px;
+  left: 20px;
+  z-index: 40;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgb(15 46 67 / 10%);
+}
+
+@media (max-width: 760px) {
+  .action-history-controls {
+    top: 72px;
+    left: 12px;
+  }
+}

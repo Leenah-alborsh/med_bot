@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { getCurrentAdmin, hasPermission } from '../../src/lib/server-api';
 import { LogoutButton } from '../../src/components/logout-button';
+import { ActionHistoryControls } from '../../src/components/action-history-controls';
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const admin = await getCurrentAdmin();
@@ -139,6 +140,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             </nav>
           </details>
         </header>
+        <ActionHistoryControls />
         {children}
       </div>
     </div>
