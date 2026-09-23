@@ -68,6 +68,8 @@ export function ContentManager({
   const [editing, setEditing] = useState<Item | null>(null);
   const [createSectionId, setCreateSectionId] = useState('');
   const [editingSectionId, setEditingSectionId] = useState('');
+  const [createContentType, setCreateContentType] = useState<'TEXT' | 'LINK' | 'FILE'>('TEXT');
+  const [creating, setCreating] = useState(false);
   const [filterYearId, setFilterYearId] = useState('');
   const [filterSemesterId, setFilterSemesterId] = useState('');
   const [filterCourseId, setFilterCourseId] = useState('');
@@ -93,10 +95,38 @@ export function ContentManager({
       (!filterCourseId || item.section.course.id === filterCourseId) &&
       (!filterCategoryId || item.contentCategoryId === filterCategoryId),
   );
+  async function uploadFiles(id: string, files: File[], progressKey: string) {
+    for (const [index, file] of files.entries()) {
+      const payload = new FormData();
+      payload.append('file', file);
+      setUploadProgress((current) => ({
+        ...current,
+        [progressKey]: Math.round((index / files.length) * 100),
+      }));
+      const { ticket } = await clientApi<{ ticket: string }>(`content/${id}/upload-ticket`, {
+        method: 'POST',
+      });
+      await clientUpload(
+        `content-upload/${id}`,
+        payload,
+        (value) =>
+          setUploadProgress((current) => ({
+            ...current,
+            [progressKey]: Math.round(((index + value / 100) / files.length) * 100),
+          })),
+        ticket,
+      );
+    }
+  }
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const files = data
+      .getAll('files')
+      .filter((value): value is File => value instanceof File && value.size > 0);
+    let createdItemId: string | null = null;
+    setCreating(true);
     try {
       const item = await clientApi<{ id: string }>('content', {
         method: 'POST',
@@ -110,6 +140,7 @@ export function ContentManager({
           displayOrder: Number(data.get('displayOrder')),
         }),
       });
+      createdItemId = item.id;
       const externalUrl = data.get('externalUrl');
       const url = typeof externalUrl === 'string' ? externalUrl.trim() : '';
       if (url)
@@ -123,11 +154,32 @@ export function ContentManager({
             fileSize: 0,
           }),
         });
+      if (files.length) await uploadFiles(item.id, files, 'create');
       form.reset();
-      setMessage('تم إنشاء المحتوى كمسودة.');
+      setCreateSectionId('');
+      setCreateContentType('TEXT');
+      setMessage(
+        files.length > 1
+          ? `تم إنشاء المحتوى ورفع ${files.length} ملفات إلى Telegram.`
+          : files.length === 1
+            ? 'تم إنشاء المحتوى ورفع الملف إلى Telegram.'
+            : 'تم إنشاء المحتوى كمسودة.',
+      );
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'تعذر إنشاء المحتوى.');
+      const detail = error instanceof Error ? error.message : 'حدث خطأ غير متوقع.';
+      setMessage(
+        createdItemId
+          ? `تم إنشاء المسودة، لكن تعذر إكمال رفع جميع الملفات: ${detail}`
+          : `تعذر إنشاء المحتوى: ${detail}`,
+      );
+    } finally {
+      setCreating(false);
+      setUploadProgress((current) => {
+        const next = { ...current };
+        delete next.create;
+        return next;
+      });
     }
   }
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
@@ -220,27 +272,7 @@ export function ContentManager({
     const files = selected instanceof HTMLInputElement ? Array.from(selected.files ?? []) : [];
     if (!files.length) return;
     try {
-      for (const [index, file] of files.entries()) {
-        const data = new FormData();
-        data.append('file', file);
-        setUploadProgress((current) => ({
-          ...current,
-          [id]: Math.round((index / files.length) * 100),
-        }));
-        const { ticket } = await clientApi<{ ticket: string }>(`content/${id}/upload-ticket`, {
-          method: 'POST',
-        });
-        await clientUpload(
-          `content-upload/${id}`,
-          data,
-          (value) =>
-            setUploadProgress((current) => ({
-              ...current,
-              [id]: Math.round(((index + value / 100) / files.length) * 100),
-            })),
-          ticket,
-        );
-      }
+      await uploadFiles(id, files, id);
       setMessage(
         files.length > 1
           ? `تم رفع ${files.length} ملفات وحفظها في Telegram.`
@@ -608,12 +640,33 @@ export function ContentManager({
           </label>
           <label>
             صيغة المحتوى
-            <select name="contentType" required>
+            <select
+              name="contentType"
+              value={createContentType}
+              onChange={(event) =>
+                setCreateContentType(event.target.value as 'TEXT' | 'LINK' | 'FILE')
+              }
+              required
+            >
               <option value="TEXT">نص</option>
               <option value="LINK">رابط</option>
               <option value="FILE">ملف</option>
             </select>
           </label>
+          {createContentType === 'FILE' && (
+            <label>
+              <span className="field-label-with-icon">
+                <Paperclip size={16} /> الملفات (اختياري)
+              </span>
+              <input
+                name="files"
+                type="file"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,image/*,audio/*,video/mp4,video/webm"
+                multiple
+              />
+              <small className="muted">يمكن اختيار ملف واحد أو عدة ملفات لنفس المحتوى.</small>
+            </label>
+          )}
           <label>
             النص أو الوصف
             <textarea name="bodyText" rows={5} />
@@ -626,9 +679,13 @@ export function ContentManager({
             ترتيب العرض
             <input name="displayOrder" type="number" min="0" required />
           </label>
-          <button className="primary" type="submit">
+          <button className="primary" type="submit" disabled={creating}>
             <Plus size={17} />
-            حفظ كمسودة
+            {creating
+              ? uploadProgress.create === undefined
+                ? 'جارٍ إنشاء المحتوى...'
+                : `رفع الملفات ${uploadProgress.create}%`
+              : 'حفظ كمسودة'}
           </button>
         </form>
       </section>
