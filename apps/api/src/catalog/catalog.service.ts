@@ -332,6 +332,14 @@ export class CatalogService {
     return this.prisma.$transaction(async (tx) => {
       const before = await this.findExisting(kind, id, tx);
       if (before.isActive) throw new BadRequestException('يجب أرشفة العنصر قبل حذفه نهائيًا.');
+      if (kind === 'content-type') {
+        const contentCount = await tx.contentItem.count({ where: { contentCategoryId: id } });
+        if (contentCount > 0) {
+          throw new BadRequestException(
+            `لا يمكن حذف نوع المحتوى لأنه مرتبط بـ ${contentCount} عنصر محتوى. احذف أو انقل المحتوى أولًا، أو اترك النوع في الأرشيف.`,
+          );
+        }
+      }
       try {
         if (kind === 'year') await tx.academicYear.delete({ where: { id } });
         else if (kind === 'semester') await tx.semester.delete({ where: { id } });

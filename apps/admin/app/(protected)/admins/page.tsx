@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AdminCreateForm } from '../../../src/components/admin-create-form';
+import { AdminDeleteButton } from '../../../src/components/admin-delete-button';
 import { getCurrentAdmin, hasPermission, serverApi } from '../../../src/lib/server-api';
 
 const statusLabels: Record<string, string> = {
@@ -14,7 +15,7 @@ interface AdminRow {
   displayNameAr: string;
   status: string;
   mustChangePassword: boolean;
-  roles: Array<{ id: string; nameAr: string }>;
+  roles: Array<{ id: string; key: string; nameAr: string }>;
 }
 interface Role {
   id: string;
@@ -35,6 +36,7 @@ export default async function AdminsPage({
     serverApi<{ items: AdminRow[]; total: number }>(`admins?${query}`),
     serverApi<Role[]>('admins/roles'),
   ]);
+  const isSuperAdmin = admin.roleKeys.includes('super-admin');
   return (
     <main className="page">
       <header className="page-heading">
@@ -91,9 +93,16 @@ export default async function AdminsPage({
                 </td>
                 <td>{item.roles.map((role) => role.nameAr).join('، ') || 'بدون دور'}</td>
                 <td>
-                  <Link className="secondary-link" href={`/admins/${item.id}`}>
-                    إدارة الحساب
-                  </Link>
+                  <div className="row-actions">
+                    <Link className="secondary-link" href={`/admins/${item.id}`}>
+                      إدارة الحساب
+                    </Link>
+                    {isSuperAdmin &&
+                      item.id !== admin.id &&
+                      !item.roles.some((role) => role.key === 'super-admin') && (
+                        <AdminDeleteButton id={item.id} name={item.displayNameAr} />
+                      )}
+                  </div>
                 </td>
               </tr>
             ))}

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { AdminsService } from './admins.service.js';
 import {
@@ -124,6 +135,17 @@ export class AdminsController {
     @Req() request: Request,
   ) {
     return this.admins.revokeSessions(id, actor, metadata(request));
+  }
+
+  @Delete(':id')
+  @UseGuards(CsrfGuard)
+  @RequirePermissions('admins.disable')
+  remove(
+    @Param('id') id: string,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Req() request: Request,
+  ) {
+    return this.admins.remove(id, actor, metadata(request));
   }
 
   @Post(':id/setup-credential')

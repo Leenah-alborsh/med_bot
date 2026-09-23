@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
@@ -158,21 +163,30 @@ export class ContentService {
     if (category.sectionId !== input.sectionId)
       throw new BadRequestException('نوع المحتوى لا يتبع القسم المحدد');
     await this.assertScope(actor, target.courseId, target.academicYearId);
-    return this.prisma.$transaction(async (tx) => {
-      const row = await tx.contentItem.create({
-        data: { ...input, createdById: actor.id, updatedById: actor.id },
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const row = await tx.contentItem.create({
+          data: { ...input, createdById: actor.id, updatedById: actor.id },
+        });
+        await this.audit.record({
+          actorId: actor.id,
+          actionKey: 'content.create',
+          entityType: 'ContentItem',
+          entityId: row.id,
+          after: row,
+          metadata,
+          client: tx,
+        });
+        return this.serialize(row);
       });
-      await this.audit.record({
-        actorId: actor.id,
-        actionKey: 'content.create',
-        entityType: 'ContentItem',
-        entityId: row.id,
-        after: row,
-        metadata,
-        client: tx,
-      });
-      return this.serialize(row);
-    });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(
+          'ترتيب العرض مستخدم مسبقًا داخل نوع المحتوى المحدد. اختر رقمًا آخر.',
+        );
+      }
+      throw error;
+    }
   }
 
   async update(id: string, input: Partial<ContentInput>, actor: Actor, metadata: RequestMetadata) {

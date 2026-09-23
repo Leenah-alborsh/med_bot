@@ -85,4 +85,79 @@ describe('administrator protections', () => {
       isolationLevel: 'Serializable',
     });
   });
+
+  it('allows only a Super Admin to remove administrators', async () => {
+    const regularActor = { ...actor, roleKeys: ['content-admin'] };
+    await expect(
+      new AdminsService({} as PrismaService).remove('target', regularActor, {}),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('refuses to remove an administrator with a protected role', async () => {
+    const tx = {
+      adminUser: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'target',
+          roles: [{ role: { isProtected: true } }],
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaService;
+
+    await expect(new AdminsService(prisma).remove('target', actor, {})).rejects.toThrow(
+      'لا يمكن حذف حساب مشرف محمي',
+    );
+  });
+
+  it('transfers content ownership before deleting an ordinary administrator', async () => {
+    const target = {
+      id: 'target',
+      email: 'ordinary@example.com',
+      displayNameAr: 'Ordinary',
+      displayNameEn: 'Ordinary',
+      status: 'ACTIVE',
+      mustChangePassword: false,
+      lastLoginAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      roles: [
+        {
+          role: {
+            id: 'role',
+            key: 'content-admin',
+            nameAr: 'مشرف',
+            nameEn: 'Admin',
+            isProtected: false,
+          },
+        },
+      ],
+      scopes: [],
+    };
+    const tx = {
+      adminUser: {
+        findUnique: vi.fn().mockResolvedValue(target),
+        delete: vi.fn().mockResolvedValue(target),
+      },
+      contentItem: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      auditLog: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaService;
+
+    await expect(new AdminsService(prisma).remove('target', actor, {})).resolves.toEqual({
+      deleted: true,
+    });
+    expect(tx.contentItem.updateMany).toHaveBeenNthCalledWith(1, {
+      where: { createdById: 'target' },
+      data: { createdById: 'actor' },
+    });
+    expect(tx.contentItem.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { updatedById: 'target' },
+      data: { updatedById: 'actor' },
+    });
+    expect(tx.adminUser.delete).toHaveBeenCalledWith({ where: { id: 'target' } });
+  });
 });

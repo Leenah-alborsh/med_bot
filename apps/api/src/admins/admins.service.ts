@@ -19,7 +19,11 @@ import type {
 } from './admin.schemas.js';
 
 const publicInclude = {
-  roles: { include: { role: { select: { id: true, key: true, nameAr: true, nameEn: true } } } },
+  roles: {
+    include: {
+      role: { select: { id: true, key: true, nameAr: true, nameEn: true, isProtected: true } },
+    },
+  },
   scopes: true,
 } as const;
 
@@ -376,6 +380,47 @@ export class AdminsService {
       return revoked;
     });
     return { revokedCount: result.count };
+  }
+
+  async remove(id: string, actor: AuthenticatedAdmin, metadata: RequestMetadata) {
+    if (!actor.roleKeys.includes(SUPER_ADMIN_ROLE_KEY)) {
+      throw new ForbiddenException('يمكن للسوبر أدمن فقط حذف المشرفين');
+    }
+    if (id === actor.id) throw new BadRequestException('لا يمكنك حذف حسابك الحالي');
+
+    await this.prisma.$transaction(async (tx) => {
+      const target = await tx.adminUser.findUnique({
+        where: { id },
+        include: publicInclude,
+      });
+      if (!target) throw new NotFoundException('Administrator not found');
+      if (target.roles.some((membership) => membership.role.isProtected)) {
+        throw new ForbiddenException('لا يمكن حذف حساب مشرف محمي');
+      }
+
+      await tx.contentItem.updateMany({
+        where: { createdById: id },
+        data: { createdById: actor.id },
+      });
+      await tx.contentItem.updateMany({
+        where: { updatedById: id },
+        data: { updatedById: actor.id },
+      });
+      await tx.adminUser.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          actionKey: 'admin.deleted',
+          entityType: 'AdminUser',
+          entityId: id,
+          before: serialize(target),
+          after: { deleted: true, contentOwnershipTransferredTo: actor.id },
+          ipAddress: metadata.ipAddress,
+          userAgent: metadata.userAgent,
+        },
+      });
+    });
+    return { deleted: true };
   }
 
   regenerateSetup(id: string, actor: AuthenticatedAdmin, metadata: RequestMetadata) {
