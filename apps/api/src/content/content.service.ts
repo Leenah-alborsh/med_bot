@@ -80,7 +80,11 @@ export class ContentService {
           select: {
             nameAr: true,
             course: {
-              select: { id: true, nameAr: true, semester: { select: { academicYearId: true } } },
+              select: {
+                id: true,
+                nameAr: true,
+                semester: { select: { id: true, academicYearId: true } },
+              },
             },
           },
         },
@@ -408,7 +412,7 @@ export class ContentService {
       where: { id },
       select: {
         courseId: true,
-        course: { select: { semester: { select: { academicYearId: true } } } },
+        course: { select: { semester: { select: { id: true, academicYearId: true } } } },
       },
     });
     if (!row) throw new NotFoundException('Section not found');
@@ -421,7 +425,7 @@ export class ContentService {
         section: {
           select: {
             courseId: true,
-            course: { select: { semester: { select: { academicYearId: true } } } },
+            course: { select: { semester: { select: { id: true, academicYearId: true } } } },
           },
         },
       },

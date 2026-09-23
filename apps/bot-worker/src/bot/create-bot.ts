@@ -32,8 +32,8 @@ const reportCallback = (id: string) => `report:${id}`;
 export const externalUrlKeyboard = (url: string) => new InlineKeyboard().url('فتح الرابط', url);
 export const brokenReportKeyboard = (id: string) =>
   new InlineKeyboard().text('الإبلاغ عن ملف تالف', reportCallback(id));
-export const publishedContentWhere = (sectionId: string) => ({
-  sectionId,
+export const publishedContentWhere = (courseId: string) => ({
+  section: { courseId, isActive: true, archivedAt: null },
   state: 'PUBLISHED' as const,
   isActive: true,
   archivedAt: null,
@@ -51,7 +51,6 @@ const promptFor = (level: NavigationLevel, hasOptions: boolean) => {
     YEAR: 'اختر السنة الدراسية:',
     SEMESTER: 'اختر الفصل الدراسي:',
     COURSE: 'اختر المادة:',
-    SECTION: 'اختر القسم:',
     CONTENT_TYPE: 'اختر نوع المحتوى:',
     CONTENT: 'اختر المحتوى:',
   }[level];
@@ -147,23 +146,10 @@ export function createMedicalBot({ token, prisma, allowLocalFiles = true }: Opti
         });
         return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
       }
-      case 'SECTION': {
-        if (!membership.navigationCourseId) return [];
-        const rows = await prisma.section.findMany({
-          where: {
-            courseId: membership.navigationCourseId,
-            isActive: true,
-            archivedAt: null,
-            course: { isActive: true, archivedAt: null },
-          },
-          orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
-        });
-        return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
-      }
       case 'CONTENT_TYPE': {
-        if (!membership.navigationSectionId) return [];
+        if (!membership.navigationCourseId) return [];
         const rows = await prisma.contentItem.findMany({
-          where: publishedContentWhere(membership.navigationSectionId),
+          where: publishedContentWhere(membership.navigationCourseId),
           select: { contentType: true },
           distinct: ['contentType'],
         });
@@ -174,12 +160,11 @@ export function createMedicalBot({ token, prisma, allowLocalFiles = true }: Opti
         }));
       }
       case 'CONTENT': {
-        if (!membership.navigationSectionId || !membership.navigationContentType) return [];
+        if (!membership.navigationCourseId || !membership.navigationContentType) return [];
         const rows = await prisma.contentItem.findMany({
           where: {
-            ...publishedContentWhere(membership.navigationSectionId),
+            ...publishedContentWhere(membership.navigationCourseId),
             contentType: membership.navigationContentType as 'TEXT' | 'LINK' | 'FILE',
-            section: { isActive: true, archivedAt: null },
           },
           orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
         });
@@ -220,11 +205,8 @@ ${prompt}`
       data.navigationSemesterId = null;
       data.navigationCourseId = null;
       data.navigationSectionId = null;
-    } else if (level === 'SECTION') {
-      data.navigationCourseId = null;
-      data.navigationSectionId = null;
-      data.navigationContentType = null;
     } else if (level === 'CONTENT_TYPE') {
+      data.navigationCourseId = null;
       data.navigationSectionId = null;
       data.navigationContentType = null;
     } else {
@@ -326,25 +308,10 @@ ${prompt}`
       if (!course) return showMenu(ctx, membership, 'هذا الخيار لم يعد متاحاً.');
       const updated = await prisma.studentBotMembership.update({
         where: { id: membership.id },
-        data: { navigationLevel: 'SECTION', navigationCourseId: course.id },
-      });
-      return showMenu(ctx, updated);
-    }
-    if (level === 'SECTION') {
-      const section = await prisma.section.findFirst({
-        where: {
-          id: selected.id,
-          courseId: membership.navigationCourseId!,
-          isActive: true,
-          archivedAt: null,
-        },
-      });
-      if (!section) return showMenu(ctx, membership, 'هذا الخيار لم يعد متاحاً.');
-      const updated = await prisma.studentBotMembership.update({
-        where: { id: membership.id },
         data: {
           navigationLevel: 'CONTENT_TYPE',
-          navigationSectionId: section.id,
+          navigationCourseId: course.id,
+          navigationSectionId: null,
           navigationContentType: null,
         },
       });
@@ -354,7 +321,7 @@ ${prompt}`
       const contentType = selected.id as 'TEXT' | 'LINK' | 'FILE';
       const exists = await prisma.contentItem.findFirst({
         where: {
-          ...publishedContentWhere(membership.navigationSectionId!),
+          ...publishedContentWhere(membership.navigationCourseId!),
           contentType,
         },
         select: { id: true },
@@ -370,7 +337,7 @@ ${prompt}`
     const item = await prisma.contentItem.findFirst({
       where: {
         id: selected.id,
-        ...publishedContentWhere(membership.navigationSectionId!),
+        ...publishedContentWhere(membership.navigationCourseId!),
         contentType: membership.navigationContentType as 'TEXT' | 'LINK' | 'FILE',
       },
       include: { attachments: { where: { isCurrent: true }, orderBy: { version: 'desc' } } },

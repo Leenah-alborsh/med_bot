@@ -23,7 +23,10 @@ type Item = {
   contentType: 'TEXT' | 'LINK' | 'FILE';
   state: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   displayOrder: number;
-  section: { nameAr: string; course: { nameAr: string } };
+  section: {
+    nameAr: string;
+    course: { id: string; nameAr: string; semester: { id: string; academicYearId: string } };
+  };
   attachments: Array<{
     id: string;
     storageProvider: 'TELEGRAM' | 'EXTERNAL_URL';
@@ -31,14 +34,52 @@ type Item = {
     externalUrl?: string;
   }>;
 };
-type Section = { id: string; nameAr: string };
+type Option = {
+  id: string;
+  nameAr: string;
+  academicYearId?: string;
+  semesterId?: string;
+  courseId?: string;
+};
+type Section = Option;
 const contentTypeLabels = { TEXT: 'نص', LINK: 'رابط', FILE: 'ملف' } as const;
 const stateLabels = { DRAFT: 'مسودة', PUBLISHED: 'منشور', ARCHIVED: 'مؤرشف' } as const;
-export function ContentManager({ items, sections }: { items: Item[]; sections: Section[] }) {
+export function ContentManager({
+  items,
+  sections,
+  courses,
+  semesters,
+  years,
+}: {
+  items: Item[];
+  sections: Section[];
+  courses: Option[];
+  semesters: Option[];
+  years: Option[];
+}) {
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [editing, setEditing] = useState<Item | null>(null);
+  const [filterYearId, setFilterYearId] = useState('');
+  const [filterSemesterId, setFilterSemesterId] = useState('');
+  const [filterCourseId, setFilterCourseId] = useState('');
+  const [filterType, setFilterType] = useState('');
+  const visibleSemesters = semesters.filter(
+    (semester) => !filterYearId || semester.academicYearId === filterYearId,
+  );
+  const visibleCourses = courses.filter(
+    (course) =>
+      (!filterYearId || course.academicYearId === filterYearId) &&
+      (!filterSemesterId || course.semesterId === filterSemesterId),
+  );
+  const filteredItems = items.filter(
+    (item) =>
+      (!filterYearId || item.section.course.semester.academicYearId === filterYearId) &&
+      (!filterSemesterId || item.section.course.semester.id === filterSemesterId) &&
+      (!filterCourseId || item.section.course.id === filterCourseId) &&
+      (!filterType || item.contentType === filterType),
+  );
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -216,9 +257,69 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
           {message}
         </p>
       )}
+      <section className="flow-filters content-filters" aria-label="فلاتر المحتوى">
+        <label>
+          السنة الدراسية
+          <select
+            value={filterYearId}
+            onChange={(event) => {
+              setFilterYearId(event.target.value);
+              setFilterSemesterId('');
+              setFilterCourseId('');
+            }}
+          >
+            <option value="">كل السنوات</option>
+            {years.map((year) => (
+              <option key={year.id} value={year.id}>
+                {year.nameAr}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          الفصل الدراسي
+          <select
+            value={filterSemesterId}
+            onChange={(event) => {
+              setFilterSemesterId(event.target.value);
+              setFilterCourseId('');
+            }}
+          >
+            <option value="">كل الفصول</option>
+            {visibleSemesters.map((semester) => (
+              <option key={semester.id} value={semester.id}>
+                {semester.nameAr}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          المادة
+          <select
+            value={filterCourseId}
+            onChange={(event) => setFilterCourseId(event.target.value)}
+          >
+            <option value="">كل المواد</option>
+            {visibleCourses.map((course) => (
+              <option key={course.id} value={course.id}>
+                {course.nameAr}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          نوع المحتوى
+          <select value={filterType} onChange={(event) => setFilterType(event.target.value)}>
+            <option value="">كل الأنواع</option>
+            <option value="FILE">ملفات</option>
+            <option value="LINK">روابط</option>
+            <option value="TEXT">نصوص</option>
+          </select>
+        </label>
+      </section>
       <section className="workspace-grid content-workspace">
         <div className="content-list">
-          {items
+          {filteredItems
             .filter((item) => item.state !== 'ARCHIVED')
             .map((item) => (
               <article className="content-row" key={item.id}>
@@ -381,17 +482,17 @@ export function ContentManager({ items, sections }: { items: Item[]; sections: S
                 )}
               </article>
             ))}
-          {!items.some((item) => item.state !== 'ARCHIVED') && (
+          {!filteredItems.some((item) => item.state !== 'ARCHIVED') && (
             <div className="empty-state">لا يوجد محتوى نشط. ابدأ من النموذج المجاور.</div>
           )}
-          {items.some((item) => item.state === 'ARCHIVED') && (
+          {filteredItems.some((item) => item.state === 'ARCHIVED') && (
             <details className="archive-drawer">
               <summary>
                 <Archive size={17} /> المحتوى المؤرشف{' '}
-                <span>{items.filter((item) => item.state === 'ARCHIVED').length}</span>
+                <span>{filteredItems.filter((item) => item.state === 'ARCHIVED').length}</span>
               </summary>
               <div className="archive-list">
-                {items
+                {filteredItems
                   .filter((item) => item.state === 'ARCHIVED')
                   .map((item) => (
                     <div className="archive-item" key={item.id}>

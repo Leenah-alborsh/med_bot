@@ -4,7 +4,15 @@ import { Archive, ArchiveRestore, Pencil, Plus, Save, Trash2, X } from 'lucide-r
 import { useRouter } from 'next/navigation';
 import { clientApi } from '../lib/client-api';
 
-type Item = { id: string; nameAr: string; nameEn: string; displayOrder: number; isActive: boolean };
+type Item = {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  displayOrder: number;
+  isActive: boolean;
+  academicYearId?: string;
+  semesterId?: string;
+};
 type Option = { id: string; nameAr: string; academicYearId?: string };
 type Kind = 'years' | 'semesters' | 'courses' | 'sections';
 const labels: Record<Kind, { title: string; singular: string }> = {
@@ -21,15 +29,19 @@ export function CatalogManager({
   items,
   parents = [],
   years = [],
+  semesters = [],
 }: {
   kind: Kind;
   items: Item[];
   parents?: Option[];
   years?: Option[];
+  semesters?: Option[];
 }) {
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [selectedYearId, setSelectedYearId] = useState('');
+  const [filterYearId, setFilterYearId] = useState('');
+  const [filterSemesterId, setFilterSemesterId] = useState('');
   const [editing, setEditing] = useState<Item | null>(null);
   const visibleParents =
     kind === 'courses'
@@ -37,6 +49,14 @@ export function CatalogManager({
       : parents;
   const parentKey =
     kind === 'semesters' ? 'academicYearId' : kind === 'courses' ? 'semesterId' : 'courseId';
+  const visibleSemesters = semesters.filter(
+    (semester) => !filterYearId || semester.academicYearId === filterYearId,
+  );
+  const filteredItems = items.filter(
+    (item) =>
+      (!filterYearId || item.academicYearId === filterYearId) &&
+      (!filterSemesterId || item.semesterId === filterSemesterId),
+  );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage('');
@@ -116,6 +136,43 @@ export function CatalogManager({
           <p className="muted">إدارة مرتبة وآمنة للمسار الذي يظهر للطلاب.</p>
         </div>
       </header>
+      {kind !== 'years' && (
+        <section className="flow-filters" aria-label="فلاتر المسار الأكاديمي">
+          <label>
+            السنة الدراسية
+            <select
+              value={filterYearId}
+              onChange={(event) => {
+                setFilterYearId(event.target.value);
+                setFilterSemesterId('');
+              }}
+            >
+              <option value="">كل السنوات</option>
+              {years.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.nameAr}
+                </option>
+              ))}
+            </select>
+          </label>
+          {(kind === 'courses' || kind === 'sections') && (
+            <label>
+              الفصل الدراسي
+              <select
+                value={filterSemesterId}
+                onChange={(event) => setFilterSemesterId(event.target.value)}
+              >
+                <option value="">كل الفصول</option>
+                {visibleSemesters.map((semester) => (
+                  <option key={semester.id} value={semester.id}>
+                    {semester.nameAr}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </section>
+      )}
       <section className="workspace-grid">
         <div className="table-wrap">
           <table>
@@ -131,7 +188,7 @@ export function CatalogManager({
               </tr>
             </thead>
             <tbody>
-              {items
+              {filteredItems
                 .filter((item) => item.isActive)
                 .map((item) => (
                   <tr key={item.id}>
@@ -179,17 +236,17 @@ export function CatalogManager({
                 ))}
             </tbody>
           </table>
-          {!items.some((item) => item.isActive) && (
+          {!filteredItems.some((item) => item.isActive) && (
             <div className="empty-state">لا توجد عناصر نشطة حتى الآن.</div>
           )}
-          {items.some((item) => !item.isActive) && (
+          {filteredItems.some((item) => !item.isActive) && (
             <details className="archive-drawer">
               <summary>
                 <Archive size={17} /> المؤرشفة{' '}
-                <span>{items.filter((item) => !item.isActive).length}</span>
+                <span>{filteredItems.filter((item) => !item.isActive).length}</span>
               </summary>
               <div className="archive-list">
-                {items
+                {filteredItems
                   .filter((item) => !item.isActive)
                   .map((item) => (
                     <div className="archive-item" key={item.id}>

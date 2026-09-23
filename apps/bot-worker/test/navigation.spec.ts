@@ -67,7 +67,7 @@ describe('Telegram reply-keyboard navigation', () => {
     expect(resolveVisibleOption('التشريح', options)).toBeNull();
   });
 
-  it('offers Arabic content-type choices before content', () => {
+  it('offers Arabic content-type choices directly after course and before content', () => {
     expect(CONTENT_TYPES).toEqual([
       { id: 'FILE', label: 'ملفات' },
       { id: 'LINK', label: 'روابط' },
@@ -77,8 +77,7 @@ describe('Telegram reply-keyboard navigation', () => {
 
   it('moves back exactly one level and main-menu resets to stage', () => {
     expect(previousLevel('CONTENT')).toBe('CONTENT_TYPE');
-    expect(previousLevel('CONTENT_TYPE')).toBe('SECTION');
-    expect(previousLevel('SECTION')).toBe('COURSE');
+    expect(previousLevel('CONTENT_TYPE')).toBe('COURSE');
     expect(previousLevel('COURSE')).toBe('SEMESTER');
     expect(previousLevel('SEMESTER')).toBe('YEAR');
     expect(previousLevel('YEAR')).toBe('STAGE');
@@ -115,8 +114,8 @@ describe('Telegram reply-keyboard navigation', () => {
   });
 
   it('queries only active published content and retains report cooldown', () => {
-    expect(publishedContentWhere('section')).toEqual({
-      sectionId: 'section',
+    expect(publishedContentWhere('course')).toEqual({
+      section: { courseId: 'course', isActive: true, archivedAt: null },
       state: 'PUBLISHED',
       isActive: true,
       archivedAt: null,

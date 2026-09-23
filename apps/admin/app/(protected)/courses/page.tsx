@@ -1,6 +1,14 @@
 import { CatalogManager } from '../../../src/components/catalog-manager';
 import { serverApi } from '../../../src/lib/server-api';
-type Item = { id: string; nameAr: string; nameEn: string; displayOrder: number; isActive: boolean };
+type Item = {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  displayOrder: number;
+  isActive: boolean;
+  academicYearId?: string;
+  semesterId?: string;
+};
 type SemesterOption = Item & { academicYearId: string };
 export default async function Page() {
   const [data, parents, years] = await Promise.all([
@@ -9,6 +17,12 @@ export default async function Page() {
     serverApi<{ items: Item[] }>('catalog/years?pageSize=100&active=true'),
   ]);
   return (
-    <CatalogManager kind="courses" items={data.items} parents={parents.items} years={years.items} />
+    <CatalogManager
+      kind="courses"
+      items={data.items}
+      parents={parents.items}
+      years={years.items}
+      semesters={parents.items}
+    />
   );
 }

@@ -174,7 +174,7 @@ export class CatalogService {
         displayOrder: true,
         isActive: true,
         archivedAt: true,
-        course: { select: { semester: { select: { academicYearId: true } } } },
+        course: { select: { semester: { select: { id: true, academicYearId: true } } } },
       },
       orderBy: [{ courseId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
     });
@@ -182,6 +182,7 @@ export class CatalogService {
       ...row,
       botId: bot.id,
       academicYearId: course.semester.academicYearId,
+      semesterId: course.semester.id,
     }));
     return this.page(await this.visible(actor, shaped), query);
   }
