@@ -62,19 +62,29 @@ enum AdminSetupTokenPurpose {
   PASSWORD_RESET
 }
 
+enum AnnouncementStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Bot {
-  id               String                 @id @default(uuid()) @db.Uuid
-  key              String                 @unique
-  displayName      String
-  telegramUsername String?
-  tokenReference   String?
-  groupType        BotGroupType
-  status           BotStatus              @default(DRAFT)
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
-  yearVisibility   AcademicYearBot[]
-  memberships      StudentBotMembership[]
-  adminScopes      AdminScope[]
+  id                 String                 @id @default(uuid()) @db.Uuid
+  key                String                 @unique
+  displayName        String
+  telegramUsername   String?
+  welcomeMessage     String?
+  welcomePhotoFileId String?
+  tokenReference     String?
+  groupType          BotGroupType
+  status             BotStatus              @default(DRAFT)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  yearVisibility     AcademicYearBot[]
+  memberships        StudentBotMembership[]
+  adminScopes        AdminScope[]
+  announcements      Announcement[]
 
   @@index([groupType, status])
 }
@@ -259,6 +269,7 @@ model AdminUser {
   updatedContent      ContentItem[]       @relation("ContentUpdatedBy")
   uploadedAttachments ContentAttachment[] @relation("AttachmentUploadedBy")
   reviewedReports     BrokenFileReport[]  @relation("ReportReviewedBy")
+  announcements       Announcement[]
 
   @@index([status])
 }
@@ -379,6 +390,29 @@ model AdminSetupToken {
   adminUser   AdminUser              @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
 
   @@index([adminUserId, purpose, expiresAt])
+}
+
+model Announcement {
+  id             String             @id @default(uuid()) @db.Uuid
+  botId          String             @db.Uuid
+  createdById    String             @db.Uuid
+  message        String
+  photoFileId    String?
+  targetYearIds  String[]           @default([])
+  status         AnnouncementStatus @default(QUEUED)
+  recipientCount Int                @default(0)
+  sentCount      Int                @default(0)
+  failedCount    Int                @default(0)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  errorMessage   String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  bot            Bot                @relation(fields: [botId], references: [id], onDelete: Cascade)
+  createdBy      AdminUser          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([botId, createdAt])
 }
 
 model ContentItem {

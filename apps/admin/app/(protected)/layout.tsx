@@ -9,6 +9,7 @@ import {
   GraduationCap,
   LayoutDashboard,
   Menu,
+  Megaphone,
   ScrollText,
   ShieldCheck,
   Stethoscope,
@@ -68,6 +69,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       label: 'المشرفون',
       icon: ShieldCheck,
       show: hasPermission(admin, 'admins.read'),
+    },
+    {
+      href: '/bot-management',
+      label: 'البوت والإعلانات',
+      icon: Megaphone,
+      show: hasPermission(admin, 'announcements.send'),
     },
     {
       href: '/reports',

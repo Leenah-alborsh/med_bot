@@ -243,7 +243,19 @@ ${prompt}`
   bot.command('start', async (ctx) => {
     const { membership } = await identify(ctx);
     const fresh = await reset(membership.id);
-    await showMenu(ctx, fresh, 'أهلاً بك في منصة التعليم الطبي.');
+    const settings = await prisma.bot.findUnique({
+      where: { key: 'medical-main' },
+      select: { welcomeMessage: true, welcomePhotoFileId: true },
+    });
+    const welcomeMessage = settings?.welcomeMessage?.trim() || 'أهلًا بك في Medical Students Hub.';
+    if (settings?.welcomePhotoFileId) {
+      await ctx.replyWithPhoto(settings.welcomePhotoFileId, {
+        caption: `${welcomeMessage}\n\nاختر المرحلة:`,
+        reply_markup: stageKeyboard(),
+      });
+      return;
+    }
+    await showMenu(ctx, fresh, welcomeMessage);
   });
 
   bot.command('menu', async (ctx) => {

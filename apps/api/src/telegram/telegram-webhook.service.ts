@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@medical/database';
 import { createMedicalBot } from '@medical/bot-worker';
+import { InputFile } from 'grammy';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { Environment } from '../config/environment.js';
 
@@ -49,6 +50,30 @@ export class TelegramWebhookService implements OnModuleInit {
       data: { telegramUsername: this.bot.botInfo.username, status: 'ACTIVE' },
     });
     this.logger.log('Telegram webhook registered');
+  }
+
+  async storePhoto(file: Express.Multer.File) {
+    if (!this.bot) throw new ServiceUnavailableException('Telegram webhook is disabled');
+    const channelId = this.config.get('TELEGRAM_FILE_CHANNEL_ID', { infer: true });
+    if (!channelId)
+      throw new ServiceUnavailableException('Telegram file channel is not configured');
+    const message = await this.bot.api.sendPhoto(
+      channelId,
+      new InputFile(file.buffer, file.originalname),
+      { caption: 'صورة ترحيب البوت' },
+    );
+    const photo = message.photo?.at(-1);
+    if (!photo) throw new ServiceUnavailableException('Telegram did not return a photo reference');
+    return photo.file_id;
+  }
+
+  async sendAnnouncement(chatId: bigint, message: string, photoFileId?: string | null) {
+    if (!this.bot) throw new ServiceUnavailableException('Telegram webhook is disabled');
+    if (photoFileId) {
+      await this.bot.api.sendPhoto(chatId.toString(), photoFileId, { caption: message });
+    } else {
+      await this.bot.api.sendMessage(chatId.toString(), message);
+    }
   }
 
   isSecretValid(candidate?: string) {
