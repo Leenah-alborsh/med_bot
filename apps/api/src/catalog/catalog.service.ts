@@ -187,8 +187,56 @@ export class CatalogService {
     return this.page(await this.visible(actor, shaped), query);
   }
 
+  async contentCategories(query: ListCatalogInput, actor: Actor) {
+    const bot = await this.mainBot();
+    const rows = await this.prisma.contentCategory.findMany({
+      where: {
+        ...(query.sectionId ? { sectionId: query.sectionId } : {}),
+        ...(query.courseId ? { section: { courseId: query.courseId } } : {}),
+        ...(query.semesterId ? { section: { course: { semesterId: query.semesterId } } } : {}),
+        ...(query.yearId
+          ? { section: { course: { semester: { academicYearId: query.yearId } } } }
+          : {}),
+        ...(query.active ? { isActive: query.active === 'true' } : {}),
+        ...(query.search
+          ? {
+              OR: [
+                { nameAr: { contains: query.search, mode: 'insensitive' as const } },
+                { nameEn: { contains: query.search, mode: 'insensitive' as const } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        sectionId: true,
+        nameAr: true,
+        nameEn: true,
+        displayOrder: true,
+        isActive: true,
+        archivedAt: true,
+        section: {
+          select: {
+            courseId: true,
+            course: {
+              select: { semesterId: true, semester: { select: { academicYearId: true } } },
+            },
+          },
+        },
+      },
+      orderBy: [{ sectionId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
+    });
+    const shaped = rows.map(({ section, ...row }) => ({
+      ...row,
+      botId: bot.id,
+      courseId: section.courseId,
+      semesterId: section.course.semesterId,
+      academicYearId: section.course.semester.academicYearId,
+    }));
+    return this.page(await this.visible(actor, shaped), query);
+  }
   async create(
-    kind: 'year' | 'semester' | 'course' | 'section',
+    kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     input: Record<string, unknown>,
     actor: Actor,
     metadata: RequestMetadata,
@@ -205,7 +253,12 @@ export class CatalogService {
         row = await tx.semester.create({ data: input as Prisma.SemesterUncheckedCreateInput });
       else if (kind === 'course')
         row = await tx.course.create({ data: input as Prisma.CourseUncheckedCreateInput });
-      else row = await tx.section.create({ data: input as Prisma.SectionUncheckedCreateInput });
+      else if (kind === 'section')
+        row = await tx.section.create({ data: input as Prisma.SectionUncheckedCreateInput });
+      else
+        row = await tx.contentCategory.create({
+          data: input as Prisma.ContentCategoryUncheckedCreateInput,
+        });
       await this.audit.record({
         actorId: actor.id,
         actionKey: 'catalog.create',
@@ -220,7 +273,7 @@ export class CatalogService {
   }
 
   async update(
-    kind: 'year' | 'semester' | 'course' | 'section',
+    kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     id: string,
     input: Record<string, unknown>,
     actor: Actor,
@@ -234,7 +287,8 @@ export class CatalogService {
       if (kind === 'year') row = await tx.academicYear.update({ where: { id }, data: input });
       else if (kind === 'semester') row = await tx.semester.update({ where: { id }, data: input });
       else if (kind === 'course') row = await tx.course.update({ where: { id }, data: input });
-      else row = await tx.section.update({ where: { id }, data: input });
+      else if (kind === 'section') row = await tx.section.update({ where: { id }, data: input });
+      else row = await tx.contentCategory.update({ where: { id }, data: input });
       await this.audit.record({
         actorId: actor.id,
         actionKey: input.displayOrder === undefined ? 'catalog.update' : 'catalog.reorder',
@@ -250,7 +304,7 @@ export class CatalogService {
   }
 
   async archive(
-    kind: 'year' | 'semester' | 'course' | 'section',
+    kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     id: string,
     actor: Actor,
     metadata: RequestMetadata,
@@ -259,7 +313,7 @@ export class CatalogService {
   }
 
   async restore(
-    kind: 'year' | 'semester' | 'course' | 'section',
+    kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     id: string,
     actor: Actor,
     metadata: RequestMetadata,
@@ -268,7 +322,7 @@ export class CatalogService {
   }
 
   async delete(
-    kind: 'year' | 'semester' | 'course' | 'section',
+    kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     id: string,
     actor: Actor,
     metadata: RequestMetadata,
@@ -282,7 +336,8 @@ export class CatalogService {
         if (kind === 'year') await tx.academicYear.delete({ where: { id } });
         else if (kind === 'semester') await tx.semester.delete({ where: { id } });
         else if (kind === 'course') await tx.course.delete({ where: { id } });
-        else await tx.section.delete({ where: { id } });
+        else if (kind === 'section') await tx.section.delete({ where: { id } });
+        else await tx.contentCategory.delete({ where: { id } });
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003')
           throw new BadRequestException(
@@ -323,6 +378,21 @@ export class CatalogService {
       if (!semester) throw new NotFoundException('Semester not found');
       return { botId: bot.id, academicYearId: semester.academicYearId };
     }
+    if (kind === 'content-type') {
+      const section = await this.prisma.section.findUnique({
+        where: { id: String(input.sectionId) },
+        select: {
+          courseId: true,
+          course: { select: { semester: { select: { academicYearId: true } } } },
+        },
+      });
+      if (!section) throw new NotFoundException('Section not found');
+      return {
+        botId: bot.id,
+        academicYearId: section.course.semester.academicYearId,
+        courseId: section.courseId,
+      };
+    }
     const course = await this.prisma.course.findUnique({
       where: { id: String(input.courseId) },
       select: { id: true, semester: { select: { academicYearId: true } } },
@@ -349,15 +419,27 @@ export class CatalogService {
       if (!row) throw new NotFoundException('Course not found');
       return this.scopeForInput('course', row);
     }
-    const row = await this.prisma.section.findUnique({ where: { id }, select: { courseId: true } });
-    if (!row) throw new NotFoundException('Section not found');
-    return this.scopeForInput('section', row);
+    if (kind === 'section') {
+      const row = await this.prisma.section.findUnique({
+        where: { id },
+        select: { courseId: true },
+      });
+      if (!row) throw new NotFoundException('Section not found');
+      return this.scopeForInput('section', row);
+    }
+    const row = await this.prisma.contentCategory.findUnique({
+      where: { id },
+      select: { sectionId: true },
+    });
+    if (!row) throw new NotFoundException('Content category not found');
+    return this.scopeForInput('content-type', row);
   }
 
   private async findExisting(kind: string, id: string, tx: Prisma.TransactionClient) {
     if (kind === 'year') return tx.academicYear.findUniqueOrThrow({ where: { id } });
     if (kind === 'semester') return tx.semester.findUniqueOrThrow({ where: { id } });
     if (kind === 'course') return tx.course.findUniqueOrThrow({ where: { id } });
-    return tx.section.findUniqueOrThrow({ where: { id } });
+    if (kind === 'section') return tx.section.findUniqueOrThrow({ where: { id } });
+    return tx.contentCategory.findUniqueOrThrow({ where: { id } });
   }
 }

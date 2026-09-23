@@ -8,6 +8,7 @@ export const listContentSchema = z.object({
   semesterId: id.optional(),
   courseId: id.optional(),
   sectionId: id.optional(),
+  contentCategoryId: id.optional(),
   state: z.enum(['DRAFT', 'PUBLISHED', 'ARCHIVED']).optional(),
   type: z.enum(['TEXT', 'LINK', 'FILE']).optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -15,6 +16,7 @@ export const listContentSchema = z.object({
 });
 const contentBaseSchema = z.object({
   sectionId: id,
+  contentCategoryId: id,
   titleAr: z.string().trim().min(1).max(200),
   titleEn: z.string().trim().max(200).optional(),
   descriptionAr: optionalText,

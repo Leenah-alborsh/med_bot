@@ -44,6 +44,7 @@ export class ContentService {
     const rows = await this.prisma.contentItem.findMany({
       where: {
         ...(query.sectionId ? { sectionId: query.sectionId } : {}),
+        ...(query.contentCategoryId ? { contentCategoryId: query.contentCategoryId } : {}),
         ...(query.courseId ? { section: { courseId: query.courseId } } : {}),
         ...(query.semesterId ? { section: { course: { semesterId: query.semesterId } } } : {}),
         ...(query.yearId
@@ -69,6 +70,8 @@ export class ContentService {
         descriptionEn: true,
         bodyText: true,
         contentType: true,
+        contentCategoryId: true,
+        contentCategory: { select: { nameAr: true, nameEn: true } },
         state: true,
         isActive: true,
         displayOrder: true,
@@ -151,6 +154,9 @@ export class ContentService {
 
   async create(input: ContentInput, actor: Actor, metadata: RequestMetadata) {
     const target = await this.sectionTarget(input.sectionId);
+    const category = await this.categoryTarget(input.contentCategoryId);
+    if (category.sectionId !== input.sectionId)
+      throw new BadRequestException('نوع المحتوى لا يتبع القسم المحدد');
     await this.assertScope(actor, target.courseId, target.academicYearId);
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.contentItem.create({
@@ -172,8 +178,13 @@ export class ContentService {
   async update(id: string, input: Partial<ContentInput>, actor: Actor, metadata: RequestMetadata) {
     const existing = await this.contentTarget(id);
     await this.assertScope(actor, existing.courseId, existing.academicYearId);
-    if (input.sectionId) {
-      const target = await this.sectionTarget(input.sectionId);
+    if (input.sectionId || input.contentCategoryId) {
+      const sectionId = input.sectionId ?? existing.sectionId;
+      const categoryId = input.contentCategoryId ?? existing.contentCategoryId;
+      const target = await this.sectionTarget(sectionId);
+      const category = await this.categoryTarget(categoryId);
+      if (category.sectionId !== sectionId)
+        throw new BadRequestException('نوع المحتوى لا يتبع القسم المحدد');
       await this.assertScope(actor, target.courseId, target.academicYearId);
     }
     return this.prisma.$transaction(async (tx) => {
@@ -247,6 +258,8 @@ export class ContentService {
         const before = await tx.contentItem.findUniqueOrThrow({ where: { id } });
         if (before.state !== 'ARCHIVED')
           throw new BadRequestException('يجب أرشفة المحتوى قبل حذفه نهائيًا.');
+        await tx.brokenFileReport.deleteMany({ where: { contentItemId: id } });
+        await tx.contentAccessEvent.deleteMany({ where: { contentItemId: id } });
         await tx.contentItem.delete({ where: { id } });
         await this.audit.record({
           actorId: actor.id,
@@ -265,7 +278,7 @@ export class ContentService {
         );
       throw error;
     }
-    await Promise.all(
+    await Promise.allSettled(
       storedFiles.map((file) =>
         this.telegramStorage.remove(file.storageChatId!, file.storageMessageId!),
       ),
@@ -418,10 +431,20 @@ export class ContentService {
     if (!row) throw new NotFoundException('Section not found');
     return { courseId: row.courseId, academicYearId: row.course.semester.academicYearId };
   }
+  private async categoryTarget(id: string) {
+    const row = await this.prisma.contentCategory.findUnique({
+      where: { id },
+      select: { sectionId: true, isActive: true },
+    });
+    if (!row || !row.isActive) throw new NotFoundException('Content category not found');
+    return row;
+  }
   private async contentTarget(id: string) {
     const row = await this.prisma.contentItem.findUnique({
       where: { id },
       select: {
+        sectionId: true,
+        contentCategoryId: true,
         section: {
           select: {
             courseId: true,
@@ -432,6 +455,8 @@ export class ContentService {
     });
     if (!row) throw new NotFoundException('Content item not found');
     return {
+      sectionId: row.sectionId,
+      contentCategoryId: row.contentCategoryId,
       courseId: row.section.courseId,
       academicYearId: row.section.course.semester.academicYearId,
     };

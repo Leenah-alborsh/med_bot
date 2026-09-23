@@ -20,6 +20,8 @@ type Item = {
   titleEn?: string;
   sectionId: string;
   bodyText?: string;
+  contentCategoryId: string;
+  contentCategory: { nameAr: string };
   contentType: 'TEXT' | 'LINK' | 'FILE';
   state: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   displayOrder: number;
@@ -40,18 +42,21 @@ type Option = {
   academicYearId?: string;
   semesterId?: string;
   courseId?: string;
+  sectionId?: string;
 };
 type Section = Option;
 const contentTypeLabels = { TEXT: 'نص', LINK: 'رابط', FILE: 'ملف' } as const;
 const stateLabels = { DRAFT: 'مسودة', PUBLISHED: 'منشور', ARCHIVED: 'مؤرشف' } as const;
 export function ContentManager({
   items,
+  categories,
   sections,
   courses,
   semesters,
   years,
 }: {
   items: Item[];
+  categories: Option[];
   sections: Section[];
   courses: Option[];
   semesters: Option[];
@@ -61,10 +66,12 @@ export function ContentManager({
   const [message, setMessage] = useState('');
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [editing, setEditing] = useState<Item | null>(null);
+  const [createSectionId, setCreateSectionId] = useState('');
+  const [editingSectionId, setEditingSectionId] = useState('');
   const [filterYearId, setFilterYearId] = useState('');
   const [filterSemesterId, setFilterSemesterId] = useState('');
   const [filterCourseId, setFilterCourseId] = useState('');
-  const [filterType, setFilterType] = useState('');
+  const [filterCategoryId, setFilterCategoryId] = useState('');
   const visibleSemesters = semesters.filter(
     (semester) => !filterYearId || semester.academicYearId === filterYearId,
   );
@@ -73,12 +80,18 @@ export function ContentManager({
       (!filterYearId || course.academicYearId === filterYearId) &&
       (!filterSemesterId || course.semesterId === filterSemesterId),
   );
+  const createCategories = categories.filter((category) => category.sectionId === createSectionId);
+  const editCategories = categories.filter((category) => category.sectionId === editingSectionId);
+  const visibleCategories = categories.filter((category) => {
+    const section = sections.find((item) => item.id === category.sectionId);
+    return !filterCourseId || section?.courseId === filterCourseId;
+  });
   const filteredItems = items.filter(
     (item) =>
       (!filterYearId || item.section.course.semester.academicYearId === filterYearId) &&
       (!filterSemesterId || item.section.course.semester.id === filterSemesterId) &&
       (!filterCourseId || item.section.course.id === filterCourseId) &&
-      (!filterType || item.contentType === filterType),
+      (!filterCategoryId || item.contentCategoryId === filterCategoryId),
   );
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,6 +104,7 @@ export function ContentManager({
           sectionId: data.get('sectionId'),
           titleAr: data.get('titleAr'),
           titleEn: data.get('titleEn') || undefined,
+          contentCategoryId: data.get('contentCategoryId'),
           contentType: data.get('contentType'),
           bodyText: data.get('bodyText') || undefined,
           displayOrder: Number(data.get('displayOrder')),
@@ -127,6 +141,7 @@ export function ContentManager({
           sectionId: data.get('sectionId'),
           titleAr: data.get('titleAr'),
           titleEn: data.get('titleEn') || undefined,
+          contentCategoryId: data.get('contentCategoryId'),
           contentType: data.get('contentType'),
           bodyText: data.get('bodyText') || undefined,
           displayOrder: Number(data.get('displayOrder')),
@@ -309,11 +324,16 @@ export function ContentManager({
         </label>
         <label>
           نوع المحتوى
-          <select value={filterType} onChange={(event) => setFilterType(event.target.value)}>
+          <select
+            value={filterCategoryId}
+            onChange={(event) => setFilterCategoryId(event.target.value)}
+          >
             <option value="">كل الأنواع</option>
-            <option value="FILE">ملفات</option>
-            <option value="LINK">روابط</option>
-            <option value="TEXT">نصوص</option>
+            {visibleCategories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.nameAr}
+              </option>
+            ))}
           </select>
         </label>
       </section>
@@ -332,7 +352,7 @@ export function ContentManager({
                   </div>
                   <span className="muted">
                     {item.section.course.nameAr} / {item.section.nameAr} ·{' '}
-                    {contentTypeLabels[item.contentType]}
+                    {item.contentCategory.nameAr} · {contentTypeLabels[item.contentType]}
                   </span>
                 </div>
                 <div className="row-actions action-cluster">
@@ -340,7 +360,10 @@ export function ContentManager({
                     className="icon-button"
                     title="تعديل"
                     aria-label="تعديل"
-                    onClick={() => setEditing(item)}
+                    onClick={() => {
+                      setEditing(item);
+                      setEditingSectionId(item.sectionId);
+                    }}
                   >
                     <Pencil size={17} />
                   </button>
@@ -389,7 +412,12 @@ export function ContentManager({
                     <div className="compact-form-grid">
                       <label>
                         القسم
-                        <select name="sectionId" defaultValue={editing.sectionId} required>
+                        <select
+                          name="sectionId"
+                          value={editingSectionId}
+                          onChange={(event) => setEditingSectionId(event.target.value)}
+                          required
+                        >
                           {sections.map((section) => (
                             <option key={section.id} value={section.id}>
                               {section.nameAr}
@@ -397,6 +425,20 @@ export function ContentManager({
                           ))}
                         </select>
                       </label>
+                      <label>
+                        نوع المحتوى
+                        <select
+                          name="contentCategoryId"
+                          defaultValue={editing.contentCategoryId}
+                          required
+                        >
+                          {editCategories.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.nameAr}
+                            </option>
+                          ))}
+                        </select>
+                      </label>{' '}
                       <label>
                         العنوان بالعربية
                         <input name="titleAr" defaultValue={editing.titleAr} required />
@@ -406,7 +448,7 @@ export function ContentManager({
                         <input name="titleEn" defaultValue={editing.titleEn ?? ''} dir="ltr" />
                       </label>
                       <label>
-                        النوع
+                        صيغة المحتوى
                         <select name="contentType" defaultValue={editing.contentType}>
                           <option value="TEXT">نص</option>
                           <option value="LINK">رابط</option>
@@ -531,7 +573,12 @@ export function ContentManager({
           </div>
           <label>
             القسم
-            <select name="sectionId" required>
+            <select
+              name="sectionId"
+              value={createSectionId}
+              onChange={(event) => setCreateSectionId(event.target.value)}
+              required
+            >
               <option value="">اختر القسم</option>
               {sections.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -541,6 +588,17 @@ export function ContentManager({
             </select>
           </label>
           <label>
+            نوع المحتوى
+            <select name="contentCategoryId" required disabled={!createSectionId}>
+              <option value="">{createSectionId ? 'اختر نوع المحتوى' : 'اختر القسم أولًا'}</option>
+              {createCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.nameAr}
+                </option>
+              ))}
+            </select>
+          </label>{' '}
+          <label>
             العنوان بالعربية
             <input name="titleAr" required />
           </label>
@@ -549,7 +607,7 @@ export function ContentManager({
             <input name="titleEn" dir="ltr" />
           </label>
           <label>
-            النوع
+            صيغة المحتوى
             <select name="contentType" required>
               <option value="TEXT">نص</option>
               <option value="LINK">رابط</option>

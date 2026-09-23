@@ -12,6 +12,7 @@ import {
   ScrollText,
   ShieldCheck,
   Stethoscope,
+  Tags,
 } from 'lucide-react';
 import { getCurrentAdmin, hasPermission } from '../../src/lib/server-api';
 import { LogoutButton } from '../../src/components/logout-button';
@@ -47,6 +48,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       href: '/sections',
       label: 'الأقسام',
       icon: Boxes,
+      show: hasPermission(admin, 'catalog.read'),
+    },
+    {
+      href: '/content-types',
+      label: 'أنواع المحتوى',
+      icon: Tags,
       show: hasPermission(admin, 'catalog.read'),
     },
     {

@@ -25,6 +25,7 @@ export default async function Page() {
       parents={courses.items}
       years={years.items}
       semesters={semesters.items}
+      courses={courses.items}
     />
   );
 }

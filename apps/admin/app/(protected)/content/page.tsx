@@ -6,6 +6,8 @@ type Item = {
   titleEn?: string;
   sectionId: string;
   bodyText?: string;
+  contentCategoryId: string;
+  contentCategory: { nameAr: string };
   contentType: 'TEXT' | 'LINK' | 'FILE';
   state: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
   displayOrder: number;
@@ -28,8 +30,9 @@ type Option = {
   courseId?: string;
 };
 export default async function Page() {
-  const [content, sections, courses, semesters, years] = await Promise.all([
+  const [content, categories, sections, courses, semesters, years] = await Promise.all([
     serverApi<{ items: Item[] }>('content?pageSize=100'),
+    serverApi<{ items: Option[] }>('catalog/content-types?pageSize=100&active=true'),
     serverApi<{ items: Option[] }>('catalog/sections?pageSize=100&active=true'),
     serverApi<{ items: Option[] }>('catalog/courses?pageSize=100&active=true'),
     serverApi<{ items: Option[] }>('catalog/semesters?pageSize=100&active=true'),
@@ -38,6 +41,7 @@ export default async function Page() {
   return (
     <ContentManager
       items={content.items}
+      categories={categories.items}
       sections={sections.items}
       courses={courses.items}
       semesters={semesters.items}

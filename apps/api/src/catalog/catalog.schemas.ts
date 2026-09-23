@@ -9,6 +9,7 @@ export const listCatalogSchema = z.object({
   yearId: id.optional(),
   semesterId: id.optional(),
   courseId: id.optional(),
+  sectionId: id.optional(),
   active: z.enum(['true', 'false']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
@@ -40,6 +41,13 @@ export const courseInputSchema = z.object({
 export const sectionInputSchema = z.object({
   courseId: id,
   parentId: id.nullable().optional(),
+  nameAr: text,
+  nameEn: text,
+  displayOrder: order,
+  isActive: z.boolean().default(true),
+});
+export const contentCategoryInputSchema = z.object({
+  sectionId: id,
   nameAr: text,
   nameEn: text,
   displayOrder: order,

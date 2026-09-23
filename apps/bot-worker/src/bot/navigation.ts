@@ -7,13 +7,9 @@ export const STAGES = [
   { id: 4, label: 'السنوات الرابعة–السادسة' },
 ] as const;
 
-export type NavigationLevel = 'STAGE' | 'YEAR' | 'SEMESTER' | 'COURSE' | 'CONTENT_TYPE' | 'CONTENT';
+export type NavigationLevel =
+  'STAGE' | 'YEAR' | 'SEMESTER' | 'COURSE' | 'SECTION' | 'CONTENT_CATEGORY' | 'CONTENT';
 
-export const CONTENT_TYPES = [
-  { id: 'FILE', label: 'ملفات' },
-  { id: 'LINK', label: 'روابط' },
-  { id: 'TEXT', label: 'نصوص' },
-] as const;
 export type MenuOption = { id: string; label: string };
 
 const PREVIOUS_LEVEL: Record<NavigationLevel, NavigationLevel> = {
@@ -21,8 +17,9 @@ const PREVIOUS_LEVEL: Record<NavigationLevel, NavigationLevel> = {
   YEAR: 'STAGE',
   SEMESTER: 'YEAR',
   COURSE: 'SEMESTER',
-  CONTENT_TYPE: 'COURSE',
-  CONTENT: 'CONTENT_TYPE',
+  SECTION: 'COURSE',
+  CONTENT_CATEGORY: 'SECTION',
+  CONTENT: 'CONTENT_CATEGORY',
 };
 
 export const previousLevel = (level: NavigationLevel) => PREVIOUS_LEVEL[level];

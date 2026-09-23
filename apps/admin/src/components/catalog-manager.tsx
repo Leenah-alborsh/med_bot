@@ -12,9 +12,18 @@ type Item = {
   isActive: boolean;
   academicYearId?: string;
   semesterId?: string;
+  courseId?: string;
+  sectionId?: string;
 };
-type Option = { id: string; nameAr: string; academicYearId?: string };
-type Kind = 'years' | 'semesters' | 'courses' | 'sections';
+type Option = {
+  id: string;
+  nameAr: string;
+  academicYearId?: string;
+  semesterId?: string;
+  courseId?: string;
+  sectionId?: string;
+};
+type Kind = 'years' | 'semesters' | 'courses' | 'sections' | 'content-types';
 const labels: Record<Kind, { title: string; singular: string }> = {
   years: {
     title: 'السنوات الدراسية',
@@ -23,6 +32,7 @@ const labels: Record<Kind, { title: string; singular: string }> = {
   semesters: { title: 'الفصول', singular: 'فصل' },
   courses: { title: 'المواد', singular: 'مادة' },
   sections: { title: 'الأقسام', singular: 'قسم' },
+  'content-types': { title: 'أنواع المحتوى', singular: 'نوع محتوى' },
 };
 export function CatalogManager({
   kind,
@@ -30,32 +40,70 @@ export function CatalogManager({
   parents = [],
   years = [],
   semesters = [],
+  courses = [],
+  sections = [],
 }: {
   kind: Kind;
   items: Item[];
   parents?: Option[];
   years?: Option[];
   semesters?: Option[];
+  courses?: Option[];
+  sections?: Option[];
 }) {
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [selectedYearId, setSelectedYearId] = useState('');
   const [filterYearId, setFilterYearId] = useState('');
   const [filterSemesterId, setFilterSemesterId] = useState('');
+  const [filterCourseId, setFilterCourseId] = useState('');
+  const [filterSectionId, setFilterSectionId] = useState('');
   const [editing, setEditing] = useState<Item | null>(null);
   const visibleParents =
     kind === 'courses'
       ? parents.filter((parent) => parent.academicYearId === selectedYearId)
-      : parents;
+      : kind === 'sections'
+        ? parents.filter(
+            (parent) =>
+              (!filterYearId || parent.academicYearId === filterYearId) &&
+              (!filterSemesterId || parent.semesterId === filterSemesterId),
+          )
+        : kind === 'content-types'
+          ? parents.filter(
+              (parent) =>
+                (!filterYearId || parent.academicYearId === filterYearId) &&
+                (!filterSemesterId || parent.semesterId === filterSemesterId) &&
+                (!filterCourseId || parent.courseId === filterCourseId),
+            )
+          : parents;
   const parentKey =
-    kind === 'semesters' ? 'academicYearId' : kind === 'courses' ? 'semesterId' : 'courseId';
+    kind === 'semesters'
+      ? 'academicYearId'
+      : kind === 'courses'
+        ? 'semesterId'
+        : kind === 'sections'
+          ? 'courseId'
+          : 'sectionId';
   const visibleSemesters = semesters.filter(
     (semester) => !filterYearId || semester.academicYearId === filterYearId,
+  );
+  const visibleCourses = courses.filter(
+    (course) =>
+      (!filterYearId || course.academicYearId === filterYearId) &&
+      (!filterSemesterId || course.semesterId === filterSemesterId),
+  );
+  const visibleSections = sections.filter(
+    (section) =>
+      (!filterYearId || section.academicYearId === filterYearId) &&
+      (!filterSemesterId || section.semesterId === filterSemesterId) &&
+      (!filterCourseId || section.courseId === filterCourseId),
   );
   const filteredItems = items.filter(
     (item) =>
       (!filterYearId || item.academicYearId === filterYearId) &&
-      (!filterSemesterId || item.semesterId === filterSemesterId),
+      (!filterSemesterId || item.semesterId === filterSemesterId) &&
+      (!filterCourseId || item.courseId === filterCourseId) &&
+      (!filterSectionId || item.sectionId === filterSectionId),
   );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -145,6 +193,8 @@ export function CatalogManager({
               onChange={(event) => {
                 setFilterYearId(event.target.value);
                 setFilterSemesterId('');
+                setFilterCourseId('');
+                setFilterSectionId('');
               }}
             >
               <option value="">كل السنوات</option>
@@ -155,17 +205,56 @@ export function CatalogManager({
               ))}
             </select>
           </label>
-          {(kind === 'courses' || kind === 'sections') && (
+          {(kind === 'courses' || kind === 'sections' || kind === 'content-types') && (
             <label>
               الفصل الدراسي
               <select
                 value={filterSemesterId}
-                onChange={(event) => setFilterSemesterId(event.target.value)}
+                onChange={(event) => {
+                  setFilterSemesterId(event.target.value);
+                  setFilterCourseId('');
+                  setFilterSectionId('');
+                }}
               >
                 <option value="">كل الفصول</option>
                 {visibleSemesters.map((semester) => (
                   <option key={semester.id} value={semester.id}>
                     {semester.nameAr}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {(kind === 'sections' || kind === 'content-types') && (
+            <label>
+              المادة
+              <select
+                value={filterCourseId}
+                onChange={(event) => {
+                  setFilterCourseId(event.target.value);
+                  setFilterSectionId('');
+                }}
+              >
+                <option value="">كل المواد</option>
+                {visibleCourses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.nameAr}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {kind === 'content-types' && (
+            <label>
+              القسم
+              <select
+                value={filterSectionId}
+                onChange={(event) => setFilterSectionId(event.target.value)}
+              >
+                <option value="">كل الأقسام</option>
+                {visibleSections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.nameAr}
                   </option>
                 ))}
               </select>
@@ -342,7 +431,13 @@ export function CatalogManager({
           )}
           {kind !== 'years' && (
             <label>
-              {kind === 'courses' ? 'الفصل الدراسي' : 'العنصر الأب'}
+              {kind === 'courses'
+                ? 'الفصل الدراسي'
+                : kind === 'sections'
+                  ? 'المادة'
+                  : kind === 'content-types'
+                    ? 'القسم'
+                    : 'السنة الدراسية'}
               <select name={parentKey} required disabled={kind === 'courses' && !selectedYearId}>
                 <option value="">
                   {kind === 'courses' && !selectedYearId ? 'اختر السنة أولًا' : 'اختر'}

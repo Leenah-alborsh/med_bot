@@ -22,6 +22,7 @@ import { CatalogService } from './catalog.service.js';
 import {
   catalogUpdateSchema,
   courseInputSchema,
+  contentCategoryInputSchema,
   listCatalogSchema,
   sectionInputSchema,
   semesterInputSchema,
@@ -71,6 +72,14 @@ export class CatalogController {
   ) {
     return this.catalog.sections(query, actor);
   }
+  @Get('content-types')
+  @RequirePermissions('catalog.read')
+  contentTypes(
+    @Query(new ZodValidationPipe(listCatalogSchema)) query: ListCatalogInput,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+  ) {
+    return this.catalog.contentCategories(query, actor);
+  }
 
   @Post('years')
   @UseGuards(CsrfGuard)
@@ -112,12 +121,22 @@ export class CatalogController {
   ) {
     return this.catalog.create('section', input, actor, metadata(request));
   }
+  @Post('content-types')
+  @UseGuards(CsrfGuard)
+  @RequirePermissions('catalog.create')
+  createContentType(
+    @Body(new ZodValidationPipe(contentCategoryInputSchema)) input: Record<string, unknown>,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Req() request: Request,
+  ) {
+    return this.catalog.create('content-type', input, actor, metadata(request));
+  }
 
   @Patch(':kind/:id')
   @UseGuards(CsrfGuard)
   @RequirePermissions('catalog.update')
   update(
-    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section',
+    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     @Param('id') id: string,
     @Body(new ZodValidationPipe(catalogUpdateSchema)) input: Record<string, unknown>,
     @CurrentAdmin() actor: AuthenticatedAdmin,
@@ -130,7 +149,7 @@ export class CatalogController {
   @UseGuards(CsrfGuard)
   @RequirePermissions('catalog.archive')
   archive(
-    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section',
+    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     @Param('id') id: string,
     @CurrentAdmin() actor: AuthenticatedAdmin,
     @Req() request: Request,
@@ -141,7 +160,7 @@ export class CatalogController {
   @UseGuards(CsrfGuard)
   @RequirePermissions('catalog.update')
   restore(
-    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section',
+    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     @Param('id') id: string,
     @CurrentAdmin() actor: AuthenticatedAdmin,
     @Req() request: Request,
@@ -153,7 +172,7 @@ export class CatalogController {
   @UseGuards(CsrfGuard)
   @RequirePermissions('catalog.archive')
   delete(
-    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section',
+    @Param('kind') kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     @Param('id') id: string,
     @CurrentAdmin() actor: AuthenticatedAdmin,
     @Req() request: Request,

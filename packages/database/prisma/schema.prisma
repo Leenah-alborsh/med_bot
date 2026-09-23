@@ -104,24 +104,26 @@ model Student {
 }
 
 model StudentBotMembership {
-  id                    String               @id @default(uuid()) @db.Uuid
-  studentId             String               @db.Uuid
-  botId                 String               @db.Uuid
-  firstSeenAt           DateTime             @default(now())
-  lastInteraction       DateTime             @default(now())
-  isBlocked             Boolean              @default(false)
-  navigationLevel       String               @default("STAGE")
-  navigationStage       Int?
-  navigationYearId      String?              @db.Uuid
-  navigationSemesterId  String?              @db.Uuid
-  navigationCourseId    String?              @db.Uuid
-  navigationSectionId   String?              @db.Uuid
-  navigationContentType String?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
-  student               Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  bot                   Bot                  @relation(fields: [botId], references: [id], onDelete: Cascade)
-  accessEvents          ContentAccessEvent[]
+  id                          String               @id @default(uuid()) @db.Uuid
+  studentId                   String               @db.Uuid
+  botId                       String               @db.Uuid
+  firstSeenAt                 DateTime             @default(now())
+  lastInteraction             DateTime             @default(now())
+  isBlocked                   Boolean              @default(false)
+  navigationLevel             String               @default("STAGE")
+  navigationStage             Int?
+  navigationYearId            String?              @db.Uuid
+  navigationSemesterId        String?              @db.Uuid
+  navigationCourseId          String?              @db.Uuid
+  navigationSectionId         String?              @db.Uuid
+  navigationContentType       String?
+  navigationContentCategoryId String?              @db.Uuid
+  navigationContentCategory   ContentCategory?     @relation(fields: [navigationContentCategoryId], references: [id], onDelete: SetNull)
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  student                     Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  bot                         Bot                  @relation(fields: [botId], references: [id], onDelete: Cascade)
+  accessEvents                ContentAccessEvent[]
 
   @@unique([studentId, botId])
   @@index([botId, isBlocked])
@@ -196,22 +198,41 @@ model Course {
 }
 
 model Section {
-  id           String        @id @default(uuid()) @db.Uuid
-  courseId     String        @db.Uuid
-  parentId     String?       @db.Uuid
+  id                String            @id @default(uuid()) @db.Uuid
+  courseId          String            @db.Uuid
+  parentId          String?           @db.Uuid
+  nameAr            String
+  nameEn            String
+  displayOrder      Int
+  isActive          Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  archivedAt        DateTime?
+  course            Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  parent            Section?          @relation("SectionHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children          Section[]         @relation("SectionHierarchy")
+  contentItems      ContentItem[]
+  contentCategories ContentCategory[]
+
+  @@index([courseId, parentId, isActive, displayOrder])
+}
+
+model ContentCategory {
+  id           String                 @id @default(uuid()) @db.Uuid
+  sectionId    String                 @db.Uuid
   nameAr       String
   nameEn       String
   displayOrder Int
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  isActive     Boolean                @default(true)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
   archivedAt   DateTime?
-  course       Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  parent       Section?      @relation("SectionHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children     Section[]     @relation("SectionHierarchy")
+  section      Section                @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   contentItems ContentItem[]
+  memberships  StudentBotMembership[]
 
-  @@index([courseId, parentId, isActive, displayOrder])
+  @@unique([sectionId, displayOrder])
+  @@index([sectionId, isActive, displayOrder])
 }
 
 model AdminUser {
@@ -361,32 +382,35 @@ model AdminSetupToken {
 }
 
 model ContentItem {
-  id            String               @id @default(uuid()) @db.Uuid
-  sectionId     String               @db.Uuid
-  titleAr       String
-  titleEn       String?
-  descriptionAr String?
-  descriptionEn String?
-  bodyText      String?
-  contentType   ContentType
-  state         PublicationState     @default(DRAFT)
-  isActive      Boolean              @default(true)
-  displayOrder  Int
-  publishedAt   DateTime?
-  archivedAt    DateTime?
-  createdById   String               @db.Uuid
-  updatedById   String               @db.Uuid
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  section       Section              @relation(fields: [sectionId], references: [id], onDelete: Restrict)
-  createdBy     AdminUser            @relation("ContentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  updatedBy     AdminUser            @relation("ContentUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
-  attachments   ContentAttachment[]
-  accessEvents  ContentAccessEvent[]
-  reports       BrokenFileReport[]
+  id                String               @id @default(uuid()) @db.Uuid
+  sectionId         String               @db.Uuid
+  contentCategoryId String               @db.Uuid
+  titleAr           String
+  titleEn           String?
+  descriptionAr     String?
+  descriptionEn     String?
+  bodyText          String?
+  contentType       ContentType
+  state             PublicationState     @default(DRAFT)
+  isActive          Boolean              @default(true)
+  displayOrder      Int
+  publishedAt       DateTime?
+  archivedAt        DateTime?
+  createdById       String               @db.Uuid
+  updatedById       String               @db.Uuid
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  section           Section              @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  contentCategory   ContentCategory      @relation(fields: [contentCategoryId], references: [id], onDelete: Restrict)
+  createdBy         AdminUser            @relation("ContentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy         AdminUser            @relation("ContentUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  attachments       ContentAttachment[]
+  accessEvents      ContentAccessEvent[]
+  reports           BrokenFileReport[]
 
-  @@unique([sectionId, displayOrder])
+  @@unique([contentCategoryId, displayOrder])
   @@index([sectionId, state, isActive, displayOrder])
+  @@index([contentCategoryId, state, isActive, displayOrder])
   @@index([contentType, state])
 }
 
