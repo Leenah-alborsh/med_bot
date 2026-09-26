@@ -9,7 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@medical/database';
 import { createMedicalBot } from '@medical/bot-worker';
-import { InputFile } from 'grammy';
+import { Api, InputFile } from 'grammy';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { Environment } from '../config/environment.js';
 
@@ -29,13 +29,23 @@ export class TelegramWebhookService implements OnModuleInit {
     const secret = this.config.get('TELEGRAM_WEBHOOK_SECRET', { infer: true });
     const explicitUrl = this.config.get('TELEGRAM_WEBHOOK_URL', { infer: true });
     const renderUrl = this.config.get('RENDER_EXTERNAL_URL', { infer: true });
+    const apiRoot = this.config.get('TELEGRAM_API_ROOT', { infer: true });
     if (!token || !secret || (!explicitUrl && !renderUrl))
       throw new Error('Telegram webhook configuration is incomplete');
+
+    if (apiRoot) {
+      try {
+        await new Api(token).logOut();
+        this.logger.log('Telegram bot logged out from the cloud Bot API');
+      } catch {
+        this.logger.log('Telegram cloud Bot API session was already logged out');
+      }
+    }
 
     this.bot = createMedicalBot({
       token,
       prisma: this.prisma,
-      apiRoot: this.config.get('TELEGRAM_API_ROOT', { infer: true }),
+      apiRoot,
       uploadDirectory: this.config.get('UPLOAD_DIRECTORY', { infer: true }),
       allowLocalFiles: false,
     });
