@@ -26,6 +26,7 @@ async function main() {
   const bot = createMedicalBot({
     token: config.MEDICAL_BOT_TOKEN,
     prisma,
+    apiRoot: config.TELEGRAM_API_ROOT,
     uploadDirectory: config.UPLOAD_DIRECTORY,
   });
   await bot.init();

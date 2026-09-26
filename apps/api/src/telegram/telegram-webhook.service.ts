@@ -35,6 +35,7 @@ export class TelegramWebhookService implements OnModuleInit {
     this.bot = createMedicalBot({
       token,
       prisma: this.prisma,
+      apiRoot: this.config.get('TELEGRAM_API_ROOT', { infer: true }),
       uploadDirectory: this.config.get('UPLOAD_DIRECTORY', { infer: true }),
       allowLocalFiles: false,
     });

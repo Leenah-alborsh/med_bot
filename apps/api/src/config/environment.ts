@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+export const MAX_UPLOAD_BYTES = 2_000_000_000;
+
+function telegramApiRoot(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const root = value.trim();
+  return root.includes('://') ? root : 'http://' + root;
+}
+
 const environmentSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -22,13 +30,19 @@ const environmentSchema = z
     TELEGRAM_WEBHOOK_URL: z.string().url().optional(),
     RENDER_EXTERNAL_URL: z.string().url().optional(),
     MEDICAL_BOT_TOKEN: z.string().trim().min(1).optional(),
+    TELEGRAM_API_ROOT: z.preprocess(telegramApiRoot, z.string().url().optional()),
     TELEGRAM_FILE_CHANNEL_ID: z
       .string()
       .trim()
       .regex(/^-100[0-9]+$/)
       .optional(),
     ADMIN_UPLOAD_TOKEN_SECRET: z.string().min(32).max(256).optional(),
-    MAX_UPLOAD_BYTES: z.coerce.number().int().min(1).max(52_428_800).default(50_000_000),
+    MAX_UPLOAD_BYTES: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_UPLOAD_BYTES)
+      .default(MAX_UPLOAD_BYTES),
     UPLOAD_DIRECTORY: z.string().trim().min(1).default('./var/uploads'),
   })
   .superRefine((environment, context) => {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { UploadTicketGuard } from '../src/content/upload-ticket.guard.js';
 import { UploadTicketService } from '../src/content/upload-ticket.service.js';
 import { TelegramFileStorageService } from '../src/content/telegram-file-storage.service.js';
 
@@ -20,6 +21,23 @@ describe('managed Telegram file storage', () => {
     });
     expect(() => service.verify(issued.ticket, 'content-2')).toThrow();
     expect(() => service.verify(`${issued.ticket}x`, 'content-1')).toThrow();
+  });
+
+  it('validates the upload ticket before the file interceptor starts', () => {
+    const actor = { id: 'admin-1', roleKeys: ['ADMIN'] };
+    const verify = vi.fn().mockReturnValue(actor);
+    const request = {
+      params: { id: 'content-1' },
+      get: vi.fn().mockReturnValue('signed-ticket'),
+    };
+    const context = {
+      switchToHttp: () => ({ getRequest: () => request }),
+    };
+    const guard = new UploadTicketGuard({ verify } as never);
+
+    expect(guard.canActivate(context as never)).toBe(true);
+    expect(verify).toHaveBeenCalledWith('signed-ticket', 'content-1');
+    expect(request).toMatchObject({ uploadActor: actor });
   });
 
   it('captures Telegram storage metadata and can remove an orphaned message', async () => {

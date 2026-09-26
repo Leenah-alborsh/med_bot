@@ -140,6 +140,55 @@ export class ContentService {
     };
   }
 
+  async uploadTargets(actor: Actor) {
+    const rows = await this.prisma.contentItem.findMany({
+      where: {
+        contentType: 'FILE',
+        isActive: true,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        titleAr: true,
+        section: {
+          select: {
+            nameAr: true,
+            course: {
+              select: {
+                id: true,
+                nameAr: true,
+                semester: {
+                  select: {
+                    academicYearId: true,
+                    academicYear: { select: { nameAr: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ sectionId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
+    });
+    if (actor.roleKeys.includes(SUPER_ADMIN_ROLE_KEY)) return { items: rows };
+
+    const bot = await this.mainBot();
+    const items = [];
+    for (const row of rows) {
+      try {
+        await this.scopes.assertResourceAccess(actor, {
+          botId: bot.id,
+          academicYearId: row.section.course.semester.academicYearId,
+          courseId: row.section.course.id,
+        });
+        items.push(row);
+      } catch {
+        /* Omit upload targets outside the admin's assigned scope. */
+      }
+    }
+    return { items };
+  }
+
   async get(id: string, actor: Actor) {
     const row = await this.prisma.contentItem.findUnique({
       where: { id },
@@ -159,14 +208,47 @@ export class ContentService {
 
   async create(input: ContentInput, actor: Actor, metadata: RequestMetadata) {
     const target = await this.sectionTarget(input.sectionId);
-    const category = await this.categoryTarget(input.contentCategoryId);
-    if (category.sectionId !== input.sectionId)
-      throw new BadRequestException('نوع المحتوى لا يتبع القسم المحدد');
+    if (input.contentCategoryId) {
+      const category = await this.categoryTarget(input.contentCategoryId);
+      if (category.sectionId !== input.sectionId)
+        throw new BadRequestException('نوع المحتوى لا يتبع القسم المحدد');
+    }
     await this.assertScope(actor, target.courseId, target.academicYearId);
     try {
       return await this.prisma.$transaction(async (tx) => {
+        let contentCategoryId = input.contentCategoryId;
+        if (!contentCategoryId) {
+          const existing = await tx.contentCategory.findFirst({
+            where: { sectionId: input.sectionId, nameEn: '__uncategorized__' },
+            select: { id: true, isActive: true },
+          });
+          if (existing) {
+            contentCategoryId = existing.id;
+            if (!existing.isActive) {
+              await tx.contentCategory.update({
+                where: { id: existing.id },
+                data: { isActive: true, archivedAt: null },
+              });
+            }
+          } else {
+            const maximum = await tx.contentCategory.aggregate({
+              where: { sectionId: input.sectionId },
+              _max: { displayOrder: true },
+            });
+            const created = await tx.contentCategory.create({
+              data: {
+                sectionId: input.sectionId,
+                nameAr: 'غير مصنف',
+                nameEn: '__uncategorized__',
+                displayOrder: (maximum._max.displayOrder ?? -1) + 1,
+              },
+              select: { id: true },
+            });
+            contentCategoryId = created.id;
+          }
+        }
         const row = await tx.contentItem.create({
-          data: { ...input, createdById: actor.id, updatedById: actor.id },
+          data: { ...input, contentCategoryId, createdById: actor.id, updatedById: actor.id },
         });
         await this.audit.record({
           actorId: actor.id,
@@ -328,6 +410,8 @@ export class ContentService {
 
   async issueUploadTicket(id: string, actor: AuthenticatedAdmin) {
     const target = await this.contentTarget(id);
+    if (target.contentType !== 'FILE')
+      throw new BadRequestException('هذا المحتوى لا يقبل رفع الملفات.');
     await this.assertScope(actor, target.courseId, target.academicYearId);
     return this.uploadTickets.issue(id, actor);
   }
@@ -343,6 +427,8 @@ export class ContentService {
     try {
       if (!isPathInsideUploadRoot(file.path)) throw new BadRequestException('مسار رفع غير صالح');
       const target = await this.contentTarget(id);
+      if (target.contentType !== 'FILE')
+        throw new BadRequestException('هذا المحتوى لا يقبل رفع الملفات.');
       await this.assertScope(actor, target.courseId, target.academicYearId);
       const checksum = await this.checksum(file.path);
       const duplicate = await this.prisma.contentAttachment.findFirst({
@@ -459,6 +545,7 @@ export class ContentService {
       select: {
         sectionId: true,
         contentCategoryId: true,
+        contentType: true,
         section: {
           select: {
             courseId: true,
@@ -471,6 +558,7 @@ export class ContentService {
     return {
       sectionId: row.sectionId,
       contentCategoryId: row.contentCategoryId,
+      contentType: row.contentType,
       courseId: row.section.courseId,
       academicYearId: row.section.course.semester.academicYearId,
     };

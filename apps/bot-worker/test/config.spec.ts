@@ -14,10 +14,12 @@ describe('loadConfig', () => {
       loadConfig({
         BOT_WORKER_ENABLED: 'true',
         MEDICAL_BOT_TOKEN: 'placeholder-token',
+        TELEGRAM_API_ROOT: 'med-bot-telegram-api:10000',
       }),
     ).toMatchObject({
       BOT_WORKER_ENABLED: true,
       MEDICAL_BOT_TOKEN: 'placeholder-token',
+      TELEGRAM_API_ROOT: 'http://med-bot-telegram-api:10000',
     });
   });
 });

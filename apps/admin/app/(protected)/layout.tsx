@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Stethoscope,
   Tags,
+  UploadCloud,
 } from 'lucide-react';
 import { getCurrentAdmin, hasPermission } from '../../src/lib/server-api';
 import { LogoutButton } from '../../src/components/logout-button';
@@ -63,6 +64,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       label: 'المحتوى والملفات',
       icon: ClipboardList,
       show: hasPermission(admin, 'content.read'),
+    },
+    {
+      href: '/uploads',
+      label: 'رفع الملفات',
+      icon: UploadCloud,
+      show: true,
     },
     {
       href: '/admins',

@@ -1,35 +1,31 @@
 import {
   Controller,
-  Headers,
   Param,
   Post,
   Req,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Request } from 'express';
+import type { UploadAuthenticatedRequest } from './upload-ticket.guard.js';
 import { ContentService } from './content.service.js';
-import { UploadTicketService } from './upload-ticket.service.js';
+import { UploadTicketGuard } from './upload-ticket.guard.js';
 import { uploadOptions } from './upload.js';
 
 @Controller('content-upload')
 export class ContentUploadController {
-  constructor(
-    private readonly content: ContentService,
-    private readonly tickets: UploadTicketService,
-  ) {}
+  constructor(private readonly content: ContentService) {}
 
   @Post(':id')
+  @UseGuards(UploadTicketGuard)
   @UseInterceptors(FileInterceptor('file', uploadOptions))
   upload(
     @Param('id') id: string,
-    @Headers('x-upload-ticket') ticket: string,
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Req() request: Request,
+    @Req() request: UploadAuthenticatedRequest,
   ) {
-    const actor = this.tickets.verify(ticket, id);
-    return this.content.attachUpload(id, file, actor, {
+    return this.content.attachUpload(id, file, request.uploadActor, {
       ipAddress: request.ip,
       userAgent: request.get('user-agent'),
     });

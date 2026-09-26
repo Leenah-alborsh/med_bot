@@ -131,7 +131,9 @@ Attachments support:
 
 - Validated public HTTPS URLs. The API does not fetch arbitrary URLs.
 - Existing trusted Telegram `file_id` values.
-- Local development uploads with MIME/extension allowlists, random stored names, path containment checks, and configurable limits.
+- Dashboard uploads with MIME/extension allowlists, safely sanitized original names, path containment checks, and a 2000 MB maximum.
+
+The standard Telegram Bot API accepts bot uploads up to 50 MB. Production runs the Local Bot API Server declared in `render.yaml` as a private service and injects its internal address into `TELEGRAM_API_ROOT`. Add `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` as Render secrets, then call the cloud Bot API `logOut` method once before the first local deployment. This enables uploads up to 2000 MB.
 
 Local files are stored under `var/uploads` by default and are ignored by Git. This is an MVP development provider, not durable production storage. Deployment must replace it with managed object storage and retain the same attachment metadata contract. When Telegram accepts a local document, the worker stores its returned `file_id` for future delivery.
 
@@ -143,7 +145,7 @@ Set `MEDICAL_BOT_TOKEN` privately in `.env`, enable `BOT_WORKER_ENABLED`, and ru
 pnpm --filter @medical/bot-worker dev
 ```
 
-The worker validates the token using `getMe`, logs only the safe bot ID/username, acquires a PostgreSQL advisory lock to prevent duplicate polling, and starts long polling. Student navigation uses a persistent Arabic Telegram Reply Keyboard for stage, year, semester, course, section, then published content. The worker persists the full navigation path, selected year, access events, and duplicate-limited broken-file reports. URL and broken-file actions remain identity-bearing inline buttons.
+The worker validates the token using `getMe`, logs only the safe bot ID/username, acquires a PostgreSQL advisory lock to prevent duplicate polling, and starts long polling. Student navigation uses a persistent Arabic Telegram Reply Keyboard for stage, year, semester, course, content category, then published content. Sections remain an internal content relationship and are not shown in the bot flow. The worker persists the navigation path, selected year, access events, and duplicate-limited broken-file reports. URL and broken-file actions remain identity-bearing inline buttons.
 
 ```bash
 pnpm db:format

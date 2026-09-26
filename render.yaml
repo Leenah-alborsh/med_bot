@@ -35,11 +35,39 @@ services:
         sync: false
       - key: TELEGRAM_WEBHOOK_SECRET
         sync: false
+      - key: TELEGRAM_API_ROOT
+        fromService:
+          type: pserv
+          name: med-bot-telegram-api
+          property: hostport
       - key: TELEGRAM_FILE_CHANNEL_ID
         sync: false
       - key: ADMIN_UPLOAD_TOKEN_SECRET
         sync: false
       - key: MAX_UPLOAD_BYTES
-        value: '49000000'
+        value: '2000000000'
       - key: TELEGRAM_WEBHOOK_URL
         value: https://med-bot-api-ughi.onrender.com/api/v1/telegram/webhook
+  - type: pserv
+    name: med-bot-telegram-api
+    runtime: docker
+    repo: https://github.com/Leenah-alborsh/med_bot
+    plan: 1c-2g
+    region: frankfurt
+    branch: master
+    autoDeployTrigger: commit
+    dockerfilePath: ./infra/telegram-bot-api/Dockerfile
+    dockerContext: ./infra/telegram-bot-api
+    envVars:
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+    disk:
+      name: telegram-bot-api-data
+      mountPath: /var/lib/telegram-bot-api
+      sizeGB: 5
+    buildFilter:
+      paths:
+        - infra/telegram-bot-api/**
+        - render.yaml

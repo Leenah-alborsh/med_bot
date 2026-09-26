@@ -8,7 +8,7 @@ export const STAGES = [
 ] as const;
 
 export type NavigationLevel =
-  'STAGE' | 'YEAR' | 'SEMESTER' | 'COURSE' | 'SECTION' | 'CONTENT_CATEGORY' | 'CONTENT';
+  'STAGE' | 'YEAR' | 'SEMESTER' | 'COURSE' | 'CONTENT_CATEGORY' | 'CONTENT';
 
 export type MenuOption = { id: string; label: string };
 
@@ -17,8 +17,7 @@ const PREVIOUS_LEVEL: Record<NavigationLevel, NavigationLevel> = {
   YEAR: 'STAGE',
   SEMESTER: 'YEAR',
   COURSE: 'SEMESTER',
-  SECTION: 'COURSE',
-  CONTENT_CATEGORY: 'SECTION',
+  CONTENT_CATEGORY: 'COURSE',
   CONTENT: 'CONTENT_CATEGORY',
 };
 

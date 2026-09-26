@@ -16,7 +16,7 @@ export const listContentSchema = z.object({
 });
 const contentBaseSchema = z.object({
   sectionId: id,
-  contentCategoryId: id,
+  contentCategoryId: id.optional(),
   titleAr: z.string().trim().min(1).max(200),
   titleEn: z.string().trim().max(200).optional(),
   descriptionAr: optionalText,

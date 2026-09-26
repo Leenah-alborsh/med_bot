@@ -24,8 +24,9 @@ export class TelegramFileStorageService {
 
   constructor(config: ConfigService<Environment, true>) {
     const token = config.get('MEDICAL_BOT_TOKEN', { infer: true });
+    const apiRoot = config.get('TELEGRAM_API_ROOT', { infer: true });
     this.channelId = config.get('TELEGRAM_FILE_CHANNEL_ID', { infer: true }) ?? null;
-    this.api = token ? new Api(token) : null;
+    this.api = token ? new Api(token, apiRoot ? { apiRoot } : undefined) : null;
   }
 
   async verifyConfiguration() {

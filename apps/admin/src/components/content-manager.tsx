@@ -14,6 +14,8 @@ import {
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from '../lib/upload-limits';
+
 type Item = {
   id: string;
   titleAr: string;
@@ -47,6 +49,19 @@ type Option = {
 type Section = Option;
 const contentTypeLabels = { TEXT: 'نص', LINK: 'رابط', FILE: 'ملف' } as const;
 const stateLabels = { DRAFT: 'مسودة', PUBLISHED: 'منشور', ARCHIVED: 'مؤرشف' } as const;
+type ContentType = 'TEXT' | 'LINK' | 'FILE';
+
+function formText(data: FormData, name: string) {
+  const value = data.get(name);
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function formContentType(data: FormData): ContentType {
+  const value = formText(data, 'contentType');
+  return value === 'LINK' || value === 'FILE' ? value : 'TEXT';
+}
 export function ContentManager({
   items,
   categories,
@@ -68,7 +83,7 @@ export function ContentManager({
   const [editing, setEditing] = useState<Item | null>(null);
   const [createSectionId, setCreateSectionId] = useState('');
   const [editingSectionId, setEditingSectionId] = useState('');
-  const [createContentType, setCreateContentType] = useState<'TEXT' | 'LINK' | 'FILE'>('TEXT');
+  const [createContentType, setCreateContentType] = useState<ContentType>('TEXT');
   const [creating, setCreating] = useState(false);
   const [filterYearId, setFilterYearId] = useState('');
   const [filterSemesterId, setFilterSemesterId] = useState('');
@@ -96,12 +111,15 @@ export function ContentManager({
       (!filterCategoryId || item.contentCategoryId === filterCategoryId),
   );
   async function uploadFiles(id: string, files: File[], progressKey: string) {
-    const oversized = files.find((file) => file.size > 50_000_000);
+    const oversized = files.find((file) => file.size > MAX_UPLOAD_BYTES);
     if (oversized) {
-      throw new Error(`الملف ${oversized.name} يتجاوز الحد الأقصى المسموح 50MB.`);
+      throw new Error(
+        `الملف ${oversized.name} يتجاوز الحد الأقصى المسموح ${MAX_UPLOAD_MEGABYTES}MB.`,
+      );
     }
     for (const [index, file] of files.entries()) {
       const payload = new FormData();
+      payload.append('originalFilename', file.name);
       payload.append('file', file);
       setUploadProgress((current) => ({
         ...current,
@@ -132,16 +150,22 @@ export function ContentManager({
     let createdItemId: string | null = null;
     setCreating(true);
     try {
+      const contentType = formContentType(data);
+      const bodyText = formText(data, 'bodyText');
+      if (contentType === 'TEXT' && !bodyText) {
+        setMessage('النص مطلوب عند اختيار محتوى نصي.');
+        return;
+      }
       const item = await clientApi<{ id: string }>('content', {
         method: 'POST',
         body: JSON.stringify({
-          sectionId: data.get('sectionId'),
-          titleAr: data.get('titleAr'),
-          titleEn: data.get('titleEn') || undefined,
-          contentCategoryId: data.get('contentCategoryId'),
-          contentType: data.get('contentType'),
-          bodyText: data.get('bodyText') || undefined,
-          displayOrder: Number(data.get('displayOrder')),
+          sectionId: formText(data, 'sectionId'),
+          titleAr: formText(data, 'titleAr'),
+          titleEn: formText(data, 'titleEn'),
+          contentCategoryId: formText(data, 'contentCategoryId'),
+          contentType,
+          bodyText,
+          displayOrder: Number(formText(data, 'displayOrder') ?? 0),
         }),
       });
       createdItemId = item.id;
@@ -191,16 +215,22 @@ export function ContentManager({
     if (!editing) return;
     const data = new FormData(event.currentTarget);
     try {
+      const contentType = formContentType(data);
+      const bodyText = formText(data, 'bodyText');
+      if (contentType === 'TEXT' && !bodyText) {
+        setMessage('النص مطلوب عند اختيار محتوى نصي.');
+        return;
+      }
       await clientApi(`content/${editing.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          sectionId: data.get('sectionId'),
-          titleAr: data.get('titleAr'),
-          titleEn: data.get('titleEn') || undefined,
-          contentCategoryId: data.get('contentCategoryId'),
-          contentType: data.get('contentType'),
-          bodyText: data.get('bodyText') || undefined,
-          displayOrder: Number(data.get('displayOrder')),
+          sectionId: formText(data, 'sectionId'),
+          titleAr: formText(data, 'titleAr'),
+          titleEn: formText(data, 'titleEn'),
+          contentCategoryId: formText(data, 'contentCategoryId'),
+          contentType,
+          bodyText,
+          displayOrder: Number(formText(data, 'displayOrder') ?? 0),
         }),
       });
       setEditing(null);
@@ -647,9 +677,7 @@ export function ContentManager({
             <select
               name="contentType"
               value={createContentType}
-              onChange={(event) =>
-                setCreateContentType(event.target.value as 'TEXT' | 'LINK' | 'FILE')
-              }
+              onChange={(event) => setCreateContentType(event.target.value as ContentType)}
               required
             >
               <option value="TEXT">نص</option>
