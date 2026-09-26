@@ -9,6 +9,7 @@ type Item = {
   nameAr: string;
   nameEn: string;
   displayOrder: number;
+  hasSections?: boolean;
   isActive: boolean;
   academicYearId?: string;
   semesterId?: string;
@@ -118,6 +119,7 @@ export function CatalogManager({
     };
     if (kind === 'years') body.number = Number(data.get('number'));
     else body[parentKey] = data.get(parentKey);
+    if (kind === 'courses') body.hasSections = data.get('hasSections') === 'on';
     try {
       await clientApi(`catalog/${kind}`, { method: 'POST', body: JSON.stringify(body) });
       form.reset();
@@ -138,6 +140,7 @@ export function CatalogManager({
           nameAr: data.get('nameAr'),
           nameEn: data.get('nameEn'),
           displayOrder: Number(data.get('displayOrder')),
+          ...(kind === 'courses' ? { hasSections: data.get('hasSections') === 'on' } : {}),
         }),
       });
       setEditing(null);
@@ -271,6 +274,7 @@ export function CatalogManager({
                 <th>الاسم بالإنجليزية</th>
                 <th>الترتيب</th>
                 <th>الحالة</th>
+                {kind === 'courses' && <th>مسار الأقسام</th>}
                 <th>
                   <span className="sr-only">الإجراءات</span>
                 </th>
@@ -291,6 +295,7 @@ export function CatalogManager({
                         {item.isActive ? 'نشط' : 'مؤرشف'}
                       </span>
                     </td>
+                    {kind === 'courses' && <td>{item.hasSections ? 'مع أقسام' : 'بدون أقسام'}</td>}
                     <td>
                       <div className="row-actions action-cluster">
                         <button
@@ -397,6 +402,16 @@ export function CatalogManager({
                 required
               />
             </label>
+            {kind === 'courses' && (
+              <label className="checkbox-label">
+                <input
+                  name="hasSections"
+                  type="checkbox"
+                  defaultChecked={editing.hasSections ?? true}
+                />
+                المادة تحتوي على أقسام
+              </label>
+            )}
             <div className="form-actions">
               <button className="primary" type="submit">
                 <Save size={17} /> حفظ التعديلات
@@ -468,6 +483,12 @@ export function CatalogManager({
             ترتيب العرض
             <input name="displayOrder" type="number" min="0" required />
           </label>
+          {kind === 'courses' && (
+            <label className="checkbox-label">
+              <input name="hasSections" type="checkbox" defaultChecked />
+              المادة تحتوي على أقسام
+            </label>
+          )}
           {message && (
             <p className="form-message" role="status">
               {message}

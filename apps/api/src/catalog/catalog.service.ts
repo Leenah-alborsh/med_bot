@@ -133,6 +133,7 @@ export class CatalogService {
         descriptionAr: true,
         descriptionEn: true,
         displayOrder: true,
+        hasSections: true,
         isActive: true,
         archivedAt: true,
         semester: { select: { academicYearId: true } },

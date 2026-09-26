@@ -1,0 +1,2 @@
+ALTER TABLE "Course"
+ADD COLUMN "hasSections" BOOLEAN NOT NULL DEFAULT true;

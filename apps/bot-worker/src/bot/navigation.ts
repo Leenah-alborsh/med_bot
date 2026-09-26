@@ -8,7 +8,7 @@ export const STAGES = [
 ] as const;
 
 export type NavigationLevel =
-  'STAGE' | 'YEAR' | 'SEMESTER' | 'COURSE' | 'CONTENT_CATEGORY' | 'CONTENT';
+  'STAGE' | 'YEAR' | 'SEMESTER' | 'COURSE' | 'SECTION' | 'CONTENT_CATEGORY' | 'CONTENT';
 
 export type MenuOption = { id: string; label: string };
 
@@ -17,11 +17,16 @@ const PREVIOUS_LEVEL: Record<NavigationLevel, NavigationLevel> = {
   YEAR: 'STAGE',
   SEMESTER: 'YEAR',
   COURSE: 'SEMESTER',
+  SECTION: 'COURSE',
   CONTENT_CATEGORY: 'COURSE',
   CONTENT: 'CONTENT_CATEGORY',
 };
 
-export const previousLevel = (level: NavigationLevel) => PREVIOUS_LEVEL[level];
+export const nextLevelAfterCourse = (hasSections: boolean): NavigationLevel =>
+  hasSections ? 'SECTION' : 'CONTENT_CATEGORY';
+
+export const previousLevel = (level: NavigationLevel, courseHasSections = false) =>
+  level === 'CONTENT_CATEGORY' && courseHasSections ? 'SECTION' : PREVIOUS_LEVEL[level];
 
 const MAX_LABEL_LENGTH = 60;
 const TWO_COLUMN_LENGTH = 22;

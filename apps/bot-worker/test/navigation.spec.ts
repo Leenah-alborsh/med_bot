@@ -11,6 +11,7 @@ import {
   BACK_TEXT,
   HOME_TEXT,
   navigationKeyboard,
+  nextLevelAfterCourse,
   previousLevel,
   resolveVisibleOption,
   stageKeyboard,
@@ -68,7 +69,11 @@ describe('Telegram reply-keyboard navigation', () => {
 
   it('moves back exactly one level and main-menu resets to stage', () => {
     expect(previousLevel('CONTENT')).toBe('CONTENT_CATEGORY');
+    expect(nextLevelAfterCourse(true)).toBe('SECTION');
+    expect(nextLevelAfterCourse(false)).toBe('CONTENT_CATEGORY');
     expect(previousLevel('CONTENT_CATEGORY')).toBe('COURSE');
+    expect(previousLevel('CONTENT_CATEGORY', true)).toBe('SECTION');
+    expect(previousLevel('SECTION')).toBe('COURSE');
     expect(previousLevel('COURSE')).toBe('SEMESTER');
     expect(previousLevel('SEMESTER')).toBe('YEAR');
     expect(previousLevel('YEAR')).toBe('STAGE');

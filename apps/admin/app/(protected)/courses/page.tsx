@@ -5,6 +5,7 @@ type Item = {
   nameAr: string;
   nameEn: string;
   displayOrder: number;
+  hasSections?: boolean;
   isActive: boolean;
   academicYearId?: string;
   semesterId?: string;

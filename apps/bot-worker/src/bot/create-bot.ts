@@ -7,6 +7,7 @@ import {
   HOME_TEXT,
   STAGES,
   navigationKeyboard,
+  nextLevelAfterCourse,
   previousLevel,
   resolveVisibleOption,
   stageKeyboard,
@@ -51,6 +52,7 @@ const promptFor = (level: NavigationLevel, hasOptions: boolean) => {
     YEAR: 'اختر السنة الدراسية:',
     SEMESTER: 'اختر الفصل الدراسي:',
     COURSE: 'اختر المادة:',
+    SECTION: 'اختر القسم:',
     CONTENT_CATEGORY: 'اختر نوع المحتوى:',
     CONTENT: 'اختر المحتوى:',
   }[level];
@@ -77,21 +79,11 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
       },
     });
     const configuredBot = await prisma.bot.findUniqueOrThrow({ where: { key: 'medical-main' } });
-    let membership = await prisma.studentBotMembership.upsert({
+    const membership = await prisma.studentBotMembership.upsert({
       where: { studentId_botId: { studentId: student.id, botId: configuredBot.id } },
       update: { lastInteraction: new Date() },
       create: { studentId: student.id, botId: configuredBot.id },
     });
-    if (membership.navigationLevel === 'SECTION') {
-      membership = await prisma.studentBotMembership.update({
-        where: { id: membership.id },
-        data: {
-          navigationLevel: 'CONTENT_CATEGORY',
-          navigationSectionId: null,
-          navigationContentCategoryId: null,
-        },
-      });
-    }
     return { student, membership };
   };
 
@@ -157,12 +149,27 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
         });
         return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
       }
+      case 'SECTION': {
+        if (!membership.navigationCourseId) return [];
+        const rows = await prisma.section.findMany({
+          where: {
+            courseId: membership.navigationCourseId,
+            isActive: true,
+            archivedAt: null,
+            course: { isActive: true, archivedAt: null, hasSections: true },
+          },
+          orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+        });
+        return visibleOptions(rows.map((row) => ({ id: row.id, label: row.nameAr })));
+      }
       case 'CONTENT_CATEGORY': {
         if (!membership.navigationCourseId) return [];
         const rows = await prisma.contentCategory.findMany({
           where: {
             section: {
-              courseId: membership.navigationCourseId,
+              ...(membership.navigationSectionId
+                ? { id: membership.navigationSectionId }
+                : { courseId: membership.navigationCourseId }),
               isActive: true,
               archivedAt: null,
               course: { isActive: true, archivedAt: null },
@@ -217,7 +224,16 @@ ${prompt}`
   const goBack = async (ctx: Context, membership: Membership) => {
     const level = membership.navigationLevel as NavigationLevel;
     if (level === 'STAGE' || level === 'YEAR') return goHome(ctx, membership.id);
-    const data: Record<string, unknown> = { navigationLevel: previousLevel(level) };
+    const course =
+      (level === 'CONTENT_CATEGORY' || level === 'CONTENT') && membership.navigationCourseId
+        ? await prisma.course.findUnique({
+            where: { id: membership.navigationCourseId },
+            select: { hasSections: true },
+          })
+        : null;
+    const data: Record<string, unknown> = {
+      navigationLevel: previousLevel(level, course?.hasSections ?? false),
+    };
     if (level === 'SEMESTER') {
       data.navigationYearId = null;
       data.navigationSemesterId = null;
@@ -229,12 +245,15 @@ ${prompt}`
       data.navigationCourseId = null;
       data.navigationSectionId = null;
       data.navigationContentCategoryId = null;
+    } else if (level === 'SECTION') {
+      data.navigationSectionId = null;
+      data.navigationContentCategoryId = null;
     } else if (level === 'CONTENT_CATEGORY') {
-      data.navigationCourseId = null;
+      if (!course?.hasSections) data.navigationCourseId = null;
       data.navigationSectionId = null;
       data.navigationContentCategoryId = null;
     } else {
-      data.navigationSectionId = null;
+      if (!course?.hasSections) data.navigationSectionId = null;
       data.navigationContentCategoryId = null;
     }
     const updated = await prisma.studentBotMembership.update({
@@ -347,10 +366,31 @@ ${prompt}`
       const updated = await prisma.studentBotMembership.update({
         where: { id: membership.id },
         data: {
-          navigationLevel: 'CONTENT_CATEGORY',
+          navigationLevel: nextLevelAfterCourse(course.hasSections),
           navigationCourseId: course.id,
           navigationSectionId: null,
           navigationContentType: null,
+          navigationContentCategoryId: null,
+        },
+      });
+      return showMenu(ctx, updated);
+    }
+    if (level === 'SECTION') {
+      const section = await prisma.section.findFirst({
+        where: {
+          id: selected.id,
+          courseId: membership.navigationCourseId!,
+          isActive: true,
+          archivedAt: null,
+          course: { hasSections: true },
+        },
+      });
+      if (!section) return showMenu(ctx, membership, 'هذا القسم لم يعد متاحاً.');
+      const updated = await prisma.studentBotMembership.update({
+        where: { id: membership.id },
+        data: {
+          navigationLevel: 'CONTENT_CATEGORY',
+          navigationSectionId: section.id,
           navigationContentCategoryId: null,
         },
       });
@@ -361,7 +401,9 @@ ${prompt}`
         where: {
           id: selected.id,
           section: {
-            courseId: membership.navigationCourseId!,
+            ...(membership.navigationSectionId
+              ? { id: membership.navigationSectionId }
+              : { courseId: membership.navigationCourseId! }),
             isActive: true,
             archivedAt: null,
           },

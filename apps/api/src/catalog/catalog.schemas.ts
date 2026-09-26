@@ -36,6 +36,7 @@ export const courseInputSchema = z.object({
   descriptionAr: z.string().trim().max(2000).optional(),
   descriptionEn: z.string().trim().max(2000).optional(),
   displayOrder: order,
+  hasSections: z.boolean().default(true),
   isActive: z.boolean().default(true),
 });
 export const sectionInputSchema = z.object({
@@ -59,6 +60,7 @@ export const catalogUpdateSchema = z.object({
   descriptionAr: z.string().trim().max(2000).nullable().optional(),
   descriptionEn: z.string().trim().max(2000).nullable().optional(),
   displayOrder: order.optional(),
+  hasSections: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });
 
