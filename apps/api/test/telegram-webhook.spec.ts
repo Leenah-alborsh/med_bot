@@ -18,10 +18,11 @@ function createService() {
       delete: vi.fn(),
     },
   };
-  const service = new TelegramWebhookService(config as never, prisma as never);
+  const inbox = { ingest: vi.fn().mockResolvedValue({ accepted: false }) };
+  const service = new TelegramWebhookService(config as never, prisma as never, inbox as never);
   const bot = { handleUpdate: vi.fn() };
   Reflect.set(service, 'bot', bot);
-  return { service, prisma, bot };
+  return { service, prisma, bot, inbox };
 }
 
 describe('TelegramWebhookService', () => {
@@ -33,12 +34,13 @@ describe('TelegramWebhookService', () => {
   });
 
   it('processes a new update once and records completion', async () => {
-    const { service, prisma, bot } = createService();
+    const { service, prisma, bot, inbox } = createService();
     prisma.telegramWebhookUpdate.create.mockResolvedValue({});
     prisma.telegramWebhookUpdate.update.mockResolvedValue({});
     bot.handleUpdate.mockResolvedValue(undefined);
 
     await expect(service.handleUpdate({ update_id: 42 })).resolves.toBe(false);
+    expect(inbox.ingest).toHaveBeenCalledOnce();
     expect(bot.handleUpdate).toHaveBeenCalledOnce();
     expect(prisma.telegramWebhookUpdate.update).toHaveBeenCalledOnce();
     const updateCall = prisma.telegramWebhookUpdate.update.mock.calls[0]?.[0] as {

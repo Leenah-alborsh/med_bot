@@ -15,11 +15,7 @@ const admin = {
   roleKeys: ['viewer'],
 } as never;
 
-function createService(overrides: {
-  prisma?: unknown;
-  scopes?: unknown;
-  tickets?: unknown;
-}) {
+function createService(overrides: { prisma?: unknown; scopes?: unknown; tickets?: unknown }) {
   return new ContentService(
     overrides.prisma as PrismaService,
     overrides.scopes as ScopeAuthorizationService,
@@ -30,11 +26,58 @@ function createService(overrides: {
 }
 
 describe('admin file upload access', () => {
-  it('does not require a content permission to issue an upload ticket', () => {
+  it('keeps attachments visible for legacy FILE content without a link code', async () => {
+    const legacy = {
+      id: 'legacy-content',
+      contentType: 'FILE',
+      telegramLinkCode: null,
+      attachments: [
+        {
+          id: 'legacy-attachment',
+          storageProvider: 'TELEGRAM',
+          telegramFileId: 'legacy-file-id',
+          storageMessageId: 42,
+          fileSize: 1234n,
+        },
+      ],
+      section: {
+        course: { id: 'course', semester: { academicYearId: 'year' } },
+      },
+    };
+    const service = createService({
+      prisma: {
+        contentItem: { findMany: vi.fn().mockResolvedValue([legacy]) },
+        bot: { findUnique: vi.fn().mockResolvedValue({ id: 'bot' }) },
+      },
+      scopes: {},
+      tickets: {},
+    });
+
+    const result = await service.list({ page: 1, pageSize: 20 } as never, {
+      id: 'admin',
+      roleKeys: ['super-admin'],
+    });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'legacy-content',
+        telegramLinkCode: null,
+        attachments: [
+          expect.objectContaining({
+            id: 'legacy-attachment',
+            telegramFileId: 'legacy-file-id',
+            fileSize: '1234',
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('requires content management permission before issuing an upload ticket', () => {
     // The function is inspected for decorator metadata and is never invoked unbound.
     // eslint-disable-next-line @typescript-eslint/unbound-method
     const uploadTicket = ContentController.prototype.uploadTicket;
-    expect(Reflect.getMetadata(PERMISSIONS_METADATA_KEY, uploadTicket)).toBeUndefined();
+    expect(Reflect.getMetadata(PERMISSIONS_METADATA_KEY, uploadTicket)).toEqual(['content.update']);
   });
 
   it('lists scoped file targets for an admin without content permissions', async () => {

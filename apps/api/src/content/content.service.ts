@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { basename } from 'node:path';
@@ -71,6 +71,7 @@ export class ContentService {
         sectionId: true,
         titleAr: true,
         titleEn: true,
+        telegramLinkCode: true,
         descriptionAr: true,
         descriptionEn: true,
         bodyText: true,
@@ -207,8 +208,30 @@ export class ContentService {
   }
 
   async create(input: ContentInput, actor: Actor, metadata: RequestMetadata) {
-    const target = await this.sectionTarget(input.sectionId);
-    if (input.contentCategoryId) {
+    const course =
+      !input.sectionId && input.courseId
+        ? await this.prisma.course.findUnique({
+            where: { id: input.courseId },
+            select: {
+              id: true,
+              nameAr: true,
+              hasSections: true,
+              isActive: true,
+              archivedAt: true,
+              semester: { select: { academicYearId: true } },
+            },
+          })
+        : null;
+    if (!input.sectionId && (!course || !course.isActive || course.archivedAt))
+      throw new NotFoundException('Course not found');
+    if (!input.sectionId && course?.hasSections)
+      throw new BadRequestException('Section is required for this course');
+    const target = input.sectionId
+      ? await this.sectionTarget(input.sectionId)
+      : { courseId: course!.id, academicYearId: course!.semester.academicYearId };
+    if (input.courseId && target.courseId !== input.courseId)
+      throw new BadRequestException('Section does not belong to the selected course');
+    if (input.sectionId && input.contentCategoryId) {
       const category = await this.categoryTarget(input.contentCategoryId);
       if (category.sectionId !== input.sectionId)
         throw new BadRequestException('نوع المحتوى لا يتبع القسم المحدد');
@@ -216,10 +239,41 @@ export class ContentService {
     await this.assertScope(actor, target.courseId, target.academicYearId);
     try {
       return await this.prisma.$transaction(async (tx) => {
+        let sectionId = input.sectionId;
+        if (!sectionId) {
+          const section = await tx.section.findFirst({
+            where: { courseId: course!.id, isActive: true, archivedAt: null },
+            orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+            select: { id: true },
+          });
+          sectionId =
+            section?.id ??
+            (
+              await tx.section.create({
+                data: {
+                  courseId: course!.id,
+                  nameAr: course!.nameAr,
+                  nameEn: '__course__',
+                  displayOrder: 0,
+                },
+                select: { id: true },
+              })
+            ).id;
+          if (input.contentCategoryId) {
+            const category = await tx.contentCategory.findUnique({
+              where: { id: input.contentCategoryId },
+              select: { sectionId: true, isActive: true },
+            });
+            if (!category?.isActive || category.sectionId !== sectionId)
+              throw new BadRequestException(
+                'Content category does not belong to the selected course',
+              );
+          }
+        }
         let contentCategoryId = input.contentCategoryId;
         if (!contentCategoryId) {
           const existing = await tx.contentCategory.findFirst({
-            where: { sectionId: input.sectionId, nameEn: '__uncategorized__' },
+            where: { sectionId, nameEn: '__uncategorized__' },
             select: { id: true, isActive: true },
           });
           if (existing) {
@@ -232,12 +286,12 @@ export class ContentService {
             }
           } else {
             const maximum = await tx.contentCategory.aggregate({
-              where: { sectionId: input.sectionId },
+              where: { sectionId },
               _max: { displayOrder: true },
             });
             const created = await tx.contentCategory.create({
               data: {
-                sectionId: input.sectionId,
+                sectionId,
                 nameAr: 'غير مصنف',
                 nameEn: '__uncategorized__',
                 displayOrder: (maximum._max.displayOrder ?? -1) + 1,
@@ -247,8 +301,18 @@ export class ContentService {
             contentCategoryId = created.id;
           }
         }
+        const contentData = { ...input };
+        delete contentData.courseId;
         const row = await tx.contentItem.create({
-          data: { ...input, contentCategoryId, createdById: actor.id, updatedById: actor.id },
+          data: {
+            ...contentData,
+            sectionId,
+            contentCategoryId,
+            telegramLinkCode:
+              input.contentType === 'FILE' ? this.generateTelegramLinkCode() : undefined,
+            createdById: actor.id,
+            updatedById: actor.id,
+          },
         });
         await this.audit.record({
           actorId: actor.id,
@@ -287,7 +351,13 @@ export class ContentService {
       const before = await tx.contentItem.findUniqueOrThrow({ where: { id } });
       const row = await tx.contentItem.update({
         where: { id },
-        data: { ...input, updatedById: actor.id },
+        data: {
+          ...input,
+          ...((input.contentType ?? existing.contentType) === 'FILE' && !existing.telegramLinkCode
+            ? { telegramLinkCode: this.generateTelegramLinkCode() }
+            : {}),
+          updatedById: actor.id,
+        },
       });
       await this.audit.record({
         actorId: actor.id,
@@ -471,6 +541,20 @@ export class ContentService {
             uploadedById: actor.id,
           },
         });
+        await tx.telegramChannelFile.updateMany({
+          where: {
+            storageChatId: stored!.storageChatId,
+            storageMessageId: stored!.storageMessageId,
+            status: 'UNCLASSIFIED',
+          },
+          data: {
+            status: 'CLASSIFIED',
+            contentItemId: id,
+            attachmentId: created.id,
+            classifiedById: actor.id,
+            classifiedAt: new Date(),
+          },
+        });
         await this.audit.record({
           actorId: actor.id,
           actionKey: 'content.attachment.upload',
@@ -501,6 +585,9 @@ export class ContentService {
     return hash.digest('hex');
   }
 
+  private generateTelegramLinkCode() {
+    return 'MED-' + randomBytes(5).toString('hex').toUpperCase();
+  }
   private serialize<T>(value: T): T {
     return JSON.parse(
       JSON.stringify(value, (_key, nested: unknown) =>
@@ -546,6 +633,7 @@ export class ContentService {
         sectionId: true,
         contentCategoryId: true,
         contentType: true,
+        telegramLinkCode: true,
         section: {
           select: {
             courseId: true,
@@ -559,6 +647,7 @@ export class ContentService {
       sectionId: row.sectionId,
       contentCategoryId: row.contentCategoryId,
       contentType: row.contentType,
+      telegramLinkCode: row.telegramLinkCode,
       courseId: row.section.courseId,
       academicYearId: row.section.course.semester.academicYearId,
     };

@@ -53,7 +53,7 @@ describe('content and attachment validation', () => {
     expect(isPathInsideUploadRoot(join(uploadRoot, 'safe.pdf'))).toBe(true);
     expect(isPathInsideUploadRoot(join(uploadRoot, '..', 'outside.pdf'))).toBe(false);
   });
-  it('allows dashboard uploads up to 2000 MB', () => {
+  it('limits dashboard uploads to the 50 MB Cloud Bot API maximum', () => {
     expect(uploadOptions.limits.fileSize).toBe(MAX_UPLOAD_BYTES);
   });
 

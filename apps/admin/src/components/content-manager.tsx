@@ -2,6 +2,7 @@
 import {
   Archive,
   ArchiveRestore,
+  Copy,
   Link2,
   Paperclip,
   Pencil,
@@ -10,16 +11,27 @@ import {
   Send,
   Trash2,
   X,
+  ChevronLeft,
+  ChevronRight,
+  FilePlus2,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from '../lib/upload-limits';
+import {
+  DIRECT_UPLOAD_TOO_LARGE_MESSAGE,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MEGABYTES,
+} from '../lib/upload-limits';
 
 type Item = {
+  source: 'managed_content';
+  unifiedId: string;
   id: string;
   titleAr: string;
   titleEn?: string;
+  telegramLinkCode?: string;
   sectionId: string;
   bodyText?: string;
   contentCategoryId: string;
@@ -38,6 +50,30 @@ type Item = {
     externalUrl?: string;
   }>;
 };
+type InboxItem = {
+  source: 'telegram_inbox';
+  unifiedId: string;
+  id: string;
+  titleAr: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: string;
+  needsClassification: true;
+};
+export type UnifiedContentItem = Item | InboxItem;
+export type ContentFilters = Partial<
+  Record<
+    | 'yearId'
+    | 'semesterId'
+    | 'courseId'
+    | 'sectionId'
+    | 'contentCategoryId'
+    | 'type'
+    | 'state'
+    | 'search',
+    string
+  >
+>;
 type Option = {
   id: string;
   nameAr: string;
@@ -45,6 +81,10 @@ type Option = {
   semesterId?: string;
   courseId?: string;
   sectionId?: string;
+  hasSections?: boolean;
+  courseHasSections?: boolean;
+  isActive?: boolean;
+  archivedAt?: string | null;
 };
 type Section = Option;
 const contentTypeLabels = { TEXT: 'نص', LINK: 'رابط', FILE: 'ملف' } as const;
@@ -69,8 +109,18 @@ export function ContentManager({
   courses,
   semesters,
   years,
+  total,
+  page,
+  pageSize,
+  filters,
+  inboxAvailable,
 }: {
-  items: Item[];
+  items: UnifiedContentItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  filters: ContentFilters;
+  inboxAvailable: boolean;
   categories: Option[];
   sections: Section[];
   courses: Option[];
@@ -81,14 +131,27 @@ export function ContentManager({
   const [message, setMessage] = useState('');
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [editing, setEditing] = useState<Item | null>(null);
+  const [createCourseId, setCreateCourseId] = useState('');
   const [createSectionId, setCreateSectionId] = useState('');
+  const [editingCourseId, setEditingCourseId] = useState('');
   const [editingSectionId, setEditingSectionId] = useState('');
   const [createContentType, setCreateContentType] = useState<ContentType>('TEXT');
   const [creating, setCreating] = useState(false);
-  const [filterYearId, setFilterYearId] = useState('');
-  const [filterSemesterId, setFilterSemesterId] = useState('');
-  const [filterCourseId, setFilterCourseId] = useState('');
-  const [filterCategoryId, setFilterCategoryId] = useState('');
+  const filterYearId = filters.yearId ?? '';
+  const filterSemesterId = filters.semesterId ?? '';
+  const filterCourseId = filters.courseId ?? '';
+  const filterCategoryId = filters.contentCategoryId ?? '';
+  function contentUrl(nextPage: number, updates: ContentFilters = {}) {
+    const query = new URLSearchParams({ page: String(nextPage) });
+    for (const [key, value] of Object.entries({ ...filters, ...updates })) {
+      if (value) query.set(key, value);
+    }
+    return `/content?${query}`;
+  }
+  function changeFilters(updates: ContentFilters) {
+    setEditing(null);
+    router.push(contentUrl(1, updates));
+  }
   const visibleSemesters = semesters.filter(
     (semester) => !filterYearId || semester.academicYearId === filterYearId,
   );
@@ -97,25 +160,46 @@ export function ContentManager({
       (!filterYearId || course.academicYearId === filterYearId) &&
       (!filterSemesterId || course.semesterId === filterSemesterId),
   );
-  const createCategories = categories.filter((category) => category.sectionId === createSectionId);
-  const editCategories = categories.filter((category) => category.sectionId === editingSectionId);
+  const createCourse = courses.find((course) => course.id === createCourseId);
+  const availableCreateCourses = courses.filter(
+    (course) => course.isActive !== false && !course.archivedAt,
+  );
+  const createCourseSections = sections.filter(
+    (section) =>
+      section.courseId === createCourseId && section.isActive !== false && !section.archivedAt,
+  );
+  const effectiveCreateSectionId =
+    createCourse?.hasSections === false ? (createCourseSections[0]?.id ?? '') : createSectionId;
+  const editingCourse = courses.find((course) => course.id === editingCourseId);
+  const editingCourseSections = sections.filter((section) => section.courseId === editingCourseId);
+  const effectiveEditingSectionId =
+    editingCourse?.hasSections === false
+      ? editing?.section.course.id === editingCourseId
+        ? editing.sectionId
+        : (editingCourseSections[0]?.id ?? '')
+      : editingSectionId;
+  const createCategories = categories.filter(
+    (category) =>
+      category.sectionId === effectiveCreateSectionId &&
+      category.isActive !== false &&
+      !category.archivedAt,
+  );
+  const editCategories = categories.filter(
+    (category) => category.sectionId === effectiveEditingSectionId,
+  );
   const visibleCategories = categories.filter((category) => {
     const section = sections.find((item) => item.id === category.sectionId);
-    return !filterCourseId || section?.courseId === filterCourseId;
+    return (
+      (!filterCourseId || section?.courseId === filterCourseId) &&
+      (!filters.sectionId || category.sectionId === filters.sectionId)
+    );
   });
-  const filteredItems = items.filter(
-    (item) =>
-      (!filterYearId || item.section.course.semester.academicYearId === filterYearId) &&
-      (!filterSemesterId || item.section.course.semester.id === filterSemesterId) &&
-      (!filterCourseId || item.section.course.id === filterCourseId) &&
-      (!filterCategoryId || item.contentCategoryId === filterCategoryId),
-  );
+  const filteredItems = items.filter((item): item is Item => item.source === 'managed_content');
+  const inboxItems = items.filter((item): item is InboxItem => item.source === 'telegram_inbox');
   async function uploadFiles(id: string, files: File[], progressKey: string) {
     const oversized = files.find((file) => file.size > MAX_UPLOAD_BYTES);
     if (oversized) {
-      throw new Error(
-        `الملف ${oversized.name} يتجاوز الحد الأقصى المسموح ${MAX_UPLOAD_MEGABYTES}MB.`,
-      );
+      throw new Error(DIRECT_UPLOAD_TOO_LARGE_MESSAGE);
     }
     for (const [index, file] of files.entries()) {
       const payload = new FormData();
@@ -160,6 +244,7 @@ export function ContentManager({
         method: 'POST',
         body: JSON.stringify({
           sectionId: formText(data, 'sectionId'),
+          courseId: createCourse?.hasSections === false ? createCourseId : undefined,
           titleAr: formText(data, 'titleAr'),
           titleEn: formText(data, 'titleEn'),
           contentCategoryId: formText(data, 'contentCategoryId'),
@@ -184,6 +269,7 @@ export function ContentManager({
         });
       if (files.length) await uploadFiles(item.id, files, 'create');
       form.reset();
+      setCreateCourseId('');
       setCreateSectionId('');
       setCreateContentType('TEXT');
       setMessage(
@@ -224,16 +310,24 @@ export function ContentManager({
       await clientApi(`content/${editing.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          sectionId: formText(data, 'sectionId'),
+          sectionId:
+            formText(data, 'sectionId') === editing.sectionId
+              ? undefined
+              : formText(data, 'sectionId'),
           titleAr: formText(data, 'titleAr'),
           titleEn: formText(data, 'titleEn'),
-          contentCategoryId: formText(data, 'contentCategoryId'),
+          contentCategoryId:
+            formText(data, 'contentCategoryId') === editing.contentCategoryId
+              ? undefined
+              : formText(data, 'contentCategoryId'),
           contentType,
           bodyText,
           displayOrder: Number(formText(data, 'displayOrder') ?? 0),
         }),
       });
       setEditing(null);
+      setEditingCourseId('');
+      setEditingSectionId('');
       setMessage('تم حفظ تعديلات المحتوى.');
       router.refresh();
     } catch (error) {
@@ -299,6 +393,10 @@ export function ContentManager({
       setMessage(error instanceof Error ? error.message : 'تعذرت إضافة الرابط.');
     }
   }
+  async function copyLinkCode(code: string) {
+    await navigator.clipboard.writeText(code);
+    setMessage('Telegram link code copied.');
+  }
   async function upload(id: string, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -333,6 +431,11 @@ export function ContentManager({
           <p className="muted">أنشئ المحتوى، أرفق موارده، ثم انشره للطلاب.</p>
         </div>
       </header>
+      {!inboxAvailable && (
+        <p className="notice" role="status">
+          ملفات Telegram الواردة غير متاحة حاليًا.
+        </p>
+      )}
       {message && (
         <p className="notice" role="status">
           {message}
@@ -344,9 +447,13 @@ export function ContentManager({
           <select
             value={filterYearId}
             onChange={(event) => {
-              setFilterYearId(event.target.value);
-              setFilterSemesterId('');
-              setFilterCourseId('');
+              changeFilters({
+                yearId: event.target.value,
+                semesterId: '',
+                courseId: '',
+                sectionId: '',
+                contentCategoryId: '',
+              });
             }}
           >
             <option value="">كل السنوات</option>
@@ -362,8 +469,12 @@ export function ContentManager({
           <select
             value={filterSemesterId}
             onChange={(event) => {
-              setFilterSemesterId(event.target.value);
-              setFilterCourseId('');
+              changeFilters({
+                semesterId: event.target.value,
+                courseId: '',
+                sectionId: '',
+                contentCategoryId: '',
+              });
             }}
           >
             <option value="">كل الفصول</option>
@@ -378,7 +489,9 @@ export function ContentManager({
           المادة
           <select
             value={filterCourseId}
-            onChange={(event) => setFilterCourseId(event.target.value)}
+            onChange={(event) =>
+              changeFilters({ courseId: event.target.value, sectionId: '', contentCategoryId: '' })
+            }
           >
             <option value="">كل المواد</option>
             {visibleCourses.map((course) => (
@@ -392,7 +505,7 @@ export function ContentManager({
           نوع المحتوى
           <select
             value={filterCategoryId}
-            onChange={(event) => setFilterCategoryId(event.target.value)}
+            onChange={(event) => changeFilters({ contentCategoryId: event.target.value })}
           >
             <option value="">كل الأنواع</option>
             {visibleCategories.map((category) => (
@@ -403,12 +516,81 @@ export function ContentManager({
           </select>
         </label>
       </section>
+      <section className="flow-filters content-filters" aria-label="فلاتر إضافية">
+        <label>
+          القسم
+          <select
+            value={filters.sectionId ?? ''}
+            onChange={(event) =>
+              changeFilters({ sectionId: event.target.value, contentCategoryId: '' })
+            }
+          >
+            <option value="">كل الأقسام</option>
+            {sections
+              .filter((section) => !filterCourseId || section.courseId === filterCourseId)
+              .map((section) => (
+                <option key={section.id} value={section.id}>
+                  {section.nameAr}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          صيغة المحتوى
+          <select
+            value={filters.type ?? ''}
+            onChange={(event) => changeFilters({ type: event.target.value })}
+          >
+            <option value="">كل الصيغ</option>
+            {Object.entries(contentTypeLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          الحالة
+          <select
+            value={filters.state ?? ''}
+            onChange={(event) => changeFilters({ state: event.target.value })}
+          >
+            <option value="">كل الحالات</option>
+            {Object.entries(stateLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
       <section className="workspace-grid content-workspace">
         <div className="content-list">
+          {inboxItems.map((item) => (
+            <article className="content-row" key={item.unifiedId}>
+              <div>
+                <div className="row-title">
+                  <strong>{item.titleAr}</strong>
+                  <span className="badge">بحاجة إلى تصنيف</span>
+                </div>
+                <span className="muted">Telegram · {item.mimeType}</span>
+              </div>
+              <div className="row-actions action-cluster">
+                <Link
+                  className="icon-button"
+                  title="تصنيف الملف"
+                  aria-label={`تصنيف ${item.fileName}`}
+                  href={`/telegram-inbox?${new URLSearchParams({ search: item.fileName })}`}
+                >
+                  <FilePlus2 size={17} />
+                </Link>
+              </div>
+            </article>
+          ))}
           {filteredItems
             .filter((item) => item.state !== 'ARCHIVED')
             .map((item) => (
-              <article className="content-row" key={item.id}>
+              <article className="content-row" key={item.unifiedId}>
                 <div>
                   <div className="row-title">
                     <strong>{item.titleAr}</strong>
@@ -428,6 +610,7 @@ export function ContentManager({
                     aria-label="تعديل"
                     onClick={() => {
                       setEditing(item);
+                      setEditingCourseId(item.section.course.id);
                       setEditingSectionId(item.sectionId);
                     }}
                   >
@@ -470,27 +653,53 @@ export function ContentManager({
                         className="icon-button dismiss"
                         type="button"
                         title="إلغاء"
-                        onClick={() => setEditing(null)}
+                        onClick={() => {
+                          setEditing(null);
+                          setEditingCourseId('');
+                          setEditingSectionId('');
+                        }}
                       >
                         <X size={17} />
                       </button>
                     </div>
                     <div className="compact-form-grid">
                       <label>
-                        القسم
+                        المادة
                         <select
-                          name="sectionId"
-                          value={editingSectionId}
-                          onChange={(event) => setEditingSectionId(event.target.value)}
+                          value={editingCourseId}
+                          onChange={(event) => {
+                            setEditingCourseId(event.target.value);
+                            setEditingSectionId('');
+                          }}
                           required
                         >
-                          {sections.map((section) => (
-                            <option key={section.id} value={section.id}>
-                              {section.nameAr}
+                          {courses.map((course) => (
+                            <option key={course.id} value={course.id}>
+                              {course.nameAr}
                             </option>
                           ))}
                         </select>
                       </label>
+                      {editingCourse?.hasSections === false ? (
+                        <input type="hidden" name="sectionId" value={effectiveEditingSectionId} />
+                      ) : (
+                        <label>
+                          القسم
+                          <select
+                            name="sectionId"
+                            value={editingSectionId}
+                            onChange={(event) => setEditingSectionId(event.target.value)}
+                            required
+                          >
+                            <option value="">اختر القسم</option>
+                            {editingCourseSections.map((section) => (
+                              <option key={section.id} value={section.id}>
+                                {section.nameAr}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                       <label>
                         نوع المحتوى
                         <select
@@ -540,11 +749,27 @@ export function ContentManager({
                       <button className="primary" type="submit">
                         <Save size={17} /> حفظ التعديلات
                       </button>
-                      <button type="button" onClick={() => setEditing(null)}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(null);
+                          setEditingCourseId('');
+                          setEditingSectionId('');
+                        }}
+                      >
                         إلغاء
                       </button>
                     </div>
                   </form>
+                )}
+                {item.contentType === 'FILE' && item.telegramLinkCode && (
+                  <div className="inline-upload">
+                    <code dir="ltr">{item.telegramLinkCode}</code>
+                    <button type="button" onClick={() => void copyLinkCode(item.telegramLinkCode!)}>
+                      <Copy size={16} />
+                      Copy
+                    </button>
+                  </div>
                 )}
                 {item.contentType === 'FILE' && (
                   <form className="inline-upload" onSubmit={(event) => void upload(item.id, event)}>
@@ -590,7 +815,7 @@ export function ContentManager({
                 )}
               </article>
             ))}
-          {!filteredItems.some((item) => item.state !== 'ARCHIVED') && (
+          {!inboxItems.length && !filteredItems.some((item) => item.state !== 'ARCHIVED') && (
             <div className="empty-state">لا يوجد محتوى نشط. ابدأ من النموذج المجاور.</div>
           )}
           {filteredItems.some((item) => item.state === 'ARCHIVED') && (
@@ -603,7 +828,7 @@ export function ContentManager({
                 {filteredItems
                   .filter((item) => item.state === 'ARCHIVED')
                   .map((item) => (
-                    <div className="archive-item" key={item.id}>
+                    <div className="archive-item" key={item.unifiedId}>
                       <div>
                         <strong>{item.titleAr}</strong>
                         <small>
@@ -631,6 +856,29 @@ export function ContentManager({
               </div>
             </details>
           )}
+          <nav className="pagination" aria-label="صفحات المحتوى">
+            <button
+              type="button"
+              className="icon-button"
+              title="الصفحة السابقة"
+              disabled={page <= 1}
+              onClick={() => router.push(contentUrl(page - 1))}
+            >
+              <ChevronRight size={17} />
+            </button>
+            <span>
+              {page} / {Math.max(1, Math.ceil(total / pageSize))} · {total}
+            </span>
+            <button
+              type="button"
+              className="icon-button"
+              title="الصفحة التالية"
+              disabled={page * pageSize >= total}
+              onClick={() => router.push(contentUrl(page + 1))}
+            >
+              <ChevronLeft size={17} />
+            </button>
+          </nav>
         </div>
         <form className="editor-panel form" onSubmit={create}>
           <div className="section-title">
@@ -638,25 +886,58 @@ export function ContentManager({
             <h2>محتوى جديد</h2>
           </div>
           <label>
-            القسم
+            المادة
             <select
-              name="sectionId"
-              value={createSectionId}
-              onChange={(event) => setCreateSectionId(event.target.value)}
+              value={createCourseId}
+              onChange={(event) => {
+                setCreateCourseId(event.target.value);
+                setCreateSectionId('');
+              }}
               required
             >
-              <option value="">اختر القسم</option>
-              {sections.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.nameAr}
+              <option value="">اختر المادة</option>
+              {availableCreateCourses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.nameAr}
                 </option>
               ))}
             </select>
           </label>
+          {createCourse?.hasSections === false ? (
+            <input type="hidden" name="sectionId" value={effectiveCreateSectionId} />
+          ) : (
+            <label>
+              القسم
+              <select
+                name="sectionId"
+                value={createSectionId}
+                onChange={(event) => setCreateSectionId(event.target.value)}
+                required
+                disabled={!createCourseId}
+              >
+                <option value="">{createCourseId ? 'اختر القسم' : 'اختر المادة أولًا'}</option>
+                {createCourseSections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.nameAr}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
             نوع المحتوى
-            <select name="contentCategoryId" required disabled={!createSectionId}>
-              <option value="">{createSectionId ? 'اختر نوع المحتوى' : 'اختر القسم أولًا'}</option>
+            <select
+              name="contentCategoryId"
+              required={createCourse?.hasSections !== false}
+              disabled={!effectiveCreateSectionId}
+            >
+              <option value="">
+                {createCourse?.hasSections === false
+                  ? 'غير مصنف'
+                  : effectiveCreateSectionId
+                    ? 'اختر نوع المحتوى'
+                    : 'اختر المادة أولًا'}
+              </option>
               {createCategories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.nameAr}
@@ -696,7 +977,10 @@ export function ContentManager({
                 accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,image/*,audio/*,video/mp4,video/webm"
                 multiple
               />
-              <small className="muted">يمكن اختيار ملف واحد أو عدة ملفات لنفس المحتوى.</small>
+              <small className="muted">
+                يمكن اختيار ملف واحد أو عدة ملفات لنفس المحتوى. الحد الأعلى للرفع المباشر{' '}
+                {MAX_UPLOAD_MEGABYTES}MB لكل ملف.
+              </small>
             </label>
           )}
           <label>

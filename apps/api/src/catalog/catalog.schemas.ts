@@ -47,13 +47,18 @@ export const sectionInputSchema = z.object({
   displayOrder: order,
   isActive: z.boolean().default(true),
 });
-export const contentCategoryInputSchema = z.object({
-  sectionId: id,
-  nameAr: text,
-  nameEn: text,
-  displayOrder: order,
-  isActive: z.boolean().default(true),
-});
+export const contentCategoryInputSchema = z
+  .object({
+    sectionId: id.optional(),
+    courseId: id.optional(),
+    nameAr: text,
+    nameEn: text,
+    displayOrder: order,
+    isActive: z.boolean().default(true),
+  })
+  .refine((value) => value.sectionId || value.courseId, {
+    message: 'sectionId or courseId is required',
+  });
 export const catalogUpdateSchema = z.object({
   nameAr: text.optional(),
   nameEn: text.optional(),

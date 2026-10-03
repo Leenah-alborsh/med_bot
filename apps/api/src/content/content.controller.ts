@@ -57,6 +57,7 @@ export class ContentController {
     return this.content.verifyStorage();
   }
   @Get('upload-targets')
+  @RequirePermissions('content.update')
   uploadTargets(@CurrentAdmin() actor: AuthenticatedAdmin) {
     return this.content.uploadTargets(actor);
   }
@@ -110,6 +111,7 @@ export class ContentController {
   }
   @Post(':id/upload-ticket')
   @UseGuards(CsrfGuard)
+  @RequirePermissions('content.update')
   uploadTicket(@Param('id') id: string, @CurrentAdmin() actor: AuthenticatedAdmin) {
     return this.content.issueUploadTicket(id, actor);
   }

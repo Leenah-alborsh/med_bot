@@ -9,7 +9,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@medical/database';
 import { createMedicalBot } from '@medical/bot-worker';
-import { Api, InputFile } from 'grammy';
+import { InputFile } from 'grammy';
+import { TelegramInboxService } from './telegram-inbox.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { Environment } from '../config/environment.js';
 
@@ -21,6 +22,7 @@ export class TelegramWebhookService implements OnModuleInit {
   constructor(
     private readonly config: ConfigService<Environment, true>,
     private readonly prisma: PrismaService,
+    private readonly inbox: TelegramInboxService,
   ) {}
 
   async onModuleInit() {
@@ -29,23 +31,11 @@ export class TelegramWebhookService implements OnModuleInit {
     const secret = this.config.get('TELEGRAM_WEBHOOK_SECRET', { infer: true });
     const explicitUrl = this.config.get('TELEGRAM_WEBHOOK_URL', { infer: true });
     const renderUrl = this.config.get('RENDER_EXTERNAL_URL', { infer: true });
-    const apiRoot = this.config.get('TELEGRAM_API_ROOT', { infer: true });
     if (!token || !secret || (!explicitUrl && !renderUrl))
       throw new Error('Telegram webhook configuration is incomplete');
-
-    if (apiRoot) {
-      try {
-        await new Api(token).logOut();
-        this.logger.log('Telegram bot logged out from the cloud Bot API');
-      } catch {
-        this.logger.log('Telegram cloud Bot API session was already logged out');
-      }
-    }
-
     this.bot = createMedicalBot({
       token,
       prisma: this.prisma,
-      apiRoot,
       uploadDirectory: this.config.get('UPLOAD_DIRECTORY', { infer: true }),
       allowLocalFiles: false,
     });
@@ -53,7 +43,7 @@ export class TelegramWebhookService implements OnModuleInit {
     const url = explicitUrl ?? `${renderUrl}/api/v1/telegram/webhook`;
     await this.bot.api.setWebhook(url, {
       secret_token: secret,
-      allowed_updates: ['message', 'callback_query'],
+      allowed_updates: ['message', 'callback_query', 'channel_post', 'edited_channel_post'],
       drop_pending_updates: false,
     });
     await this.prisma.bot.update({
@@ -107,6 +97,7 @@ export class TelegramWebhookService implements OnModuleInit {
     }
 
     try {
+      await this.inbox.ingest(update, this.config.get('TELEGRAM_FILE_CHANNEL_ID', { infer: true }));
       await this.bot.handleUpdate(update as Parameters<typeof this.bot.handleUpdate>[0]);
       await this.prisma.telegramWebhookUpdate.update({
         where: { updateId: BigInt(updateId) },

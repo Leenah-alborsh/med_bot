@@ -40,6 +40,23 @@ export const publishedContentWhere = (sectionId: string) => ({
   archivedAt: null,
 });
 export const brokenReportSince = (now = Date.now()) => new Date(now - 86_400_000);
+export function telegramFileDelivery(attachment: {
+  storageChatId: bigint | null;
+  storageMessageId: number | null;
+  telegramFileId: string | null;
+}) {
+  if (attachment.storageChatId && attachment.storageMessageId) {
+    return {
+      kind: 'copy' as const,
+      storageChatId: attachment.storageChatId.toString(),
+      storageMessageId: attachment.storageMessageId,
+    };
+  }
+  if (attachment.telegramFileId) {
+    return { kind: 'file-id' as const, fileId: attachment.telegramFileId };
+  }
+  return null;
+}
 export function parseCallbackData(data: string) {
   const match = /^report:([0-9a-f-]{1,36})$/.exec(data);
   return match ? { action: 'report' as const, id: match[1]! } : null;
@@ -462,24 +479,26 @@ ${prompt}`
       );
       if (!files.length) await ctx.reply('لا توجد ملفات متاحة حالياً.');
       for (const [index, attachment] of files.entries()) {
-        let source: string | InputFile | null = attachment.telegramFileId ?? null;
-        if (!source && allowLocalFiles && attachment.storedPath) {
+        const delivery = telegramFileDelivery(attachment);
+        let localSource: InputFile | null = null;
+        if (!delivery && allowLocalFiles && attachment.storedPath) {
           const path = resolve(attachment.storedPath);
-          source = existsSync(path)
+          localSource = existsSync(path)
             ? new InputFile(createReadStream(path), attachment.originalFilename)
             : null;
         }
-        if (!source) continue;
+        if (!delivery && !localSource) continue;
         const caption =
           files.length > 1 ? `${item.titleAr} - ملف ${index + 1} من ${files.length}` : item.titleAr;
-        if (attachment.storageChatId && attachment.storageMessageId) {
+        if (delivery?.kind === 'copy') {
           await ctx.api.copyMessage(
             ctx.chat.id,
-            attachment.storageChatId.toString(),
-            attachment.storageMessageId,
+            delivery.storageChatId,
+            delivery.storageMessageId,
             { caption, reply_markup: brokenReportKeyboard(item.id) },
           );
         } else {
+          const source = delivery?.kind === 'file-id' ? delivery.fileId : localSource!;
           const message = await ctx.replyWithDocument(source, {
             caption,
             reply_markup: brokenReportKeyboard(item.id),

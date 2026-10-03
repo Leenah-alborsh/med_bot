@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FileWarning,
   GraduationCap,
+  Inbox,
   LayoutDashboard,
   Menu,
   Megaphone,
@@ -66,10 +67,16 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       show: hasPermission(admin, 'content.read'),
     },
     {
+      href: '/telegram-inbox',
+      label: 'الملفات الواردة',
+      icon: Inbox,
+      show: hasPermission(admin, 'content.read') && hasPermission(admin, 'content.create'),
+    },
+    {
       href: '/uploads',
       label: 'رفع الملفات',
       icon: UploadCloud,
-      show: true,
+      show: hasPermission(admin, 'content.update'),
     },
     {
       href: '/admins',

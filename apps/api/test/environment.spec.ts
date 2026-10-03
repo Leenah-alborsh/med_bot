@@ -6,11 +6,11 @@ const baseEnvironment = {
 };
 
 describe('API environment', () => {
-  it('defaults the dashboard upload limit to 2000 MB', () => {
+  it('defaults the dashboard upload limit to the 50 MB Cloud Bot API limit', () => {
     expect(validateEnvironment(baseEnvironment).MAX_UPLOAD_BYTES).toBe(MAX_UPLOAD_BYTES);
   });
 
-  it('accepts at most 2000 MB for dashboard uploads', () => {
+  it('accepts at most 50 MB for dashboard uploads', () => {
     expect(
       validateEnvironment({
         ...baseEnvironment,
@@ -25,18 +25,18 @@ describe('API environment', () => {
     ).toThrow('Invalid API environment');
   });
 
-  it('accepts an optional local Telegram Bot API root', () => {
+  it('requires the trusted storage channel when webhook mode is enabled', () => {
+    const webhook = {
+      ...baseEnvironment,
+      TELEGRAM_WEBHOOK_ENABLED: 'true',
+      MEDICAL_BOT_TOKEN: 'token',
+      TELEGRAM_WEBHOOK_SECRET: 's'.repeat(32),
+      TELEGRAM_WEBHOOK_URL: 'https://example.com/api/v1/telegram/webhook',
+    };
+    expect(() => validateEnvironment(webhook)).toThrow('Invalid API environment');
     expect(
-      validateEnvironment({
-        ...baseEnvironment,
-        TELEGRAM_API_ROOT: 'http://telegram-bot-api:8081',
-      }).TELEGRAM_API_ROOT,
-    ).toBe('http://telegram-bot-api:8081');
-    expect(
-      validateEnvironment({
-        ...baseEnvironment,
-        TELEGRAM_API_ROOT: 'med-bot-telegram-api:10000',
-      }).TELEGRAM_API_ROOT,
-    ).toBe('http://med-bot-telegram-api:10000');
+      validateEnvironment({ ...webhook, TELEGRAM_FILE_CHANNEL_ID: '-1001234567890' })
+        .TELEGRAM_FILE_CHANNEL_ID,
+    ).toBe('-1001234567890');
   });
 });

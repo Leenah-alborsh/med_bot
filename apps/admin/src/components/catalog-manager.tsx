@@ -15,6 +15,7 @@ type Item = {
   semesterId?: string;
   courseId?: string;
   sectionId?: string;
+  courseHasSections?: boolean;
 };
 type Option = {
   id: string;
@@ -23,6 +24,8 @@ type Option = {
   semesterId?: string;
   courseId?: string;
   sectionId?: string;
+  hasSections?: boolean;
+  courseHasSections?: boolean;
 };
 type Kind = 'years' | 'semesters' | 'courses' | 'sections' | 'content-types';
 const labels: Record<Kind, { title: string; singular: string }> = {
@@ -55,6 +58,7 @@ export function CatalogManager({
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [selectedYearId, setSelectedYearId] = useState('');
+  const [selectedContentCourseId, setSelectedContentCourseId] = useState('');
   const [filterYearId, setFilterYearId] = useState('');
   const [filterSemesterId, setFilterSemesterId] = useState('');
   const [filterCourseId, setFilterCourseId] = useState('');
@@ -99,6 +103,11 @@ export function CatalogManager({
       (!filterSemesterId || section.semesterId === filterSemesterId) &&
       (!filterCourseId || section.courseId === filterCourseId),
   );
+  const selectedContentCourse = courses.find((course) => course.id === selectedContentCourseId);
+  const selectedContentCourseSections = sections.filter(
+    (section) => section.courseId === selectedContentCourseId,
+  );
+  const selectedContentCourseSectionId = selectedContentCourseSections[0]?.id ?? '';
   const filteredItems = items.filter(
     (item) =>
       (!filterYearId || item.academicYearId === filterYearId) &&
@@ -118,11 +127,15 @@ export function CatalogManager({
       isActive: true,
     };
     if (kind === 'years') body.number = Number(data.get('number'));
-    else body[parentKey] = data.get(parentKey);
+    else if (kind === 'content-types') {
+      if (selectedContentCourse?.hasSections === false) body.courseId = selectedContentCourse.id;
+      else body.sectionId = data.get('sectionId');
+    } else body[parentKey] = data.get(parentKey);
     if (kind === 'courses') body.hasSections = data.get('hasSections') === 'on';
     try {
       await clientApi(`catalog/${kind}`, { method: 'POST', body: JSON.stringify(body) });
       form.reset();
+      setSelectedContentCourseId('');
       setMessage('تم الحفظ بنجاح.');
       router.refresh();
     } catch (error) {
@@ -444,15 +457,49 @@ export function CatalogManager({
               </select>
             </label>
           )}
-          {kind !== 'years' && (
+          {kind === 'content-types' && (
+            <>
+              <label>
+                المادة
+                <select
+                  value={selectedContentCourseId}
+                  onChange={(event) => setSelectedContentCourseId(event.target.value)}
+                  required
+                >
+                  <option value="">اختر المادة</option>
+                  {courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.nameAr}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {selectedContentCourse?.hasSections === false ? (
+                <input type="hidden" name="sectionId" value={selectedContentCourseSectionId} />
+              ) : (
+                <label>
+                  القسم
+                  <select name="sectionId" required disabled={!selectedContentCourseId}>
+                    <option value="">
+                      {selectedContentCourseId ? 'اختر القسم' : 'اختر المادة أولًا'}
+                    </option>
+                    {selectedContentCourseSections.map((section) => (
+                      <option key={section.id} value={section.id}>
+                        {section.nameAr}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </>
+          )}
+          {kind !== 'years' && kind !== 'content-types' && (
             <label>
               {kind === 'courses'
                 ? 'الفصل الدراسي'
                 : kind === 'sections'
                   ? 'المادة'
-                  : kind === 'content-types'
-                    ? 'القسم'
-                    : 'السنة الدراسية'}
+                  : 'السنة الدراسية'}
               <select name={parentKey} required disabled={kind === 'courses' && !selectedYearId}>
                 <option value="">
                   {kind === 'courses' && !selectedYearId ? 'اختر السنة أولًا' : 'اختر'}

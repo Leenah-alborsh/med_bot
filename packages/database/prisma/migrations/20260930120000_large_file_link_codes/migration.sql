@@ -1,0 +1,1 @@
+ALTER TABLE "ContentItem" ADD COLUMN "telegramLinkCode" TEXT;  ALTER TABLE "TelegramChannelFile" ADD COLUMN "linkCode" TEXT;  CREATE UNIQUE INDEX "ContentItem_telegramLinkCode_key" ON "ContentItem"("telegramLinkCode"); CREATE INDEX "TelegramChannelFile_linkCode_idx" ON "TelegramChannelFile"("linkCode");

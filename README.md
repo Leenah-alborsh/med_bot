@@ -131,11 +131,12 @@ Attachments support:
 
 - Validated public HTTPS URLs. The API does not fetch arbitrary URLs.
 - Existing trusted Telegram `file_id` values.
-- Dashboard uploads with MIME/extension allowlists, safely sanitized original names, path containment checks, and a 2000 MB maximum.
+- Dashboard uploads with MIME/extension allowlists, safely sanitized original names, path containment checks, streaming disk handling, and the Cloud Bot API limit of 50 MB.
+- Telegram Channel Inbox for larger files: an administrator uploads the file with the Telegram app to the private storage channel, then classifies it in the dashboard. Neon stores metadata and Telegram identifiers only; Render never downloads the channel file.
 
-The standard Telegram Bot API accepts bot uploads up to 50 MB. Production runs the Local Bot API Server declared in `render.yaml` as a private service and injects its internal address into `TELEGRAM_API_ROOT`. Add `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` as Render secrets, then call the cloud Bot API `logOut` method once before the first local deployment. This enables uploads up to 2000 MB.
+The Cloud Bot API accepts new multipart document uploads up to 50 MB. Files already present on Telegram can be resent by `file_id` without re-uploading, so large files remain in the private storage channel and are delivered directly by Telegram. No Local Bot API Server is required by the production Blueprint.
 
-Local files are stored under `var/uploads` by default and are ignored by Git. This is an MVP development provider, not durable production storage. Deployment must replace it with managed object storage and retain the same attachment metadata contract. When Telegram accepts a local document, the worker stores its returned `file_id` for future delivery.
+Temporary dashboard uploads are streamed to `var/uploads` and removed after Telegram accepts them. Channel Inbox files never use this directory and never pass through Render memory or storage.
 
 ## Telegram development flow
 

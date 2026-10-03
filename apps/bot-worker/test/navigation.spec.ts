@@ -6,6 +6,7 @@ import {
   externalUrlKeyboard,
   parseCallbackData,
   publishedContentWhere,
+  telegramFileDelivery,
 } from '../src/bot/create-bot.js';
 import {
   BACK_TEXT,
@@ -110,6 +111,26 @@ describe('Telegram reply-keyboard navigation', () => {
     expect(parseCallbackData('section:11111111-1111-4111-8111-111111111111:0')).toBeNull();
   });
 
+  it('delivers a large Telegram-hosted file without downloading or buffering it', () => {
+    expect(
+      telegramFileDelivery({
+        storageChatId: -1001234567890n,
+        storageMessageId: 77,
+        telegramFileId: 'large-file-id',
+      }),
+    ).toEqual({
+      kind: 'copy',
+      storageChatId: '-1001234567890',
+      storageMessageId: 77,
+    });
+    expect(
+      telegramFileDelivery({
+        storageChatId: null,
+        storageMessageId: null,
+        telegramFileId: 'large-file-id',
+      }),
+    ).toEqual({ kind: 'file-id', fileId: 'large-file-id' });
+  });
   it('queries only active published content and retains report cooldown', () => {
     expect(publishedContentWhere('section')).toEqual({
       sectionId: 'section',

@@ -25,14 +25,25 @@ const contentBaseSchema = z.object({
   contentType: z.enum(['TEXT', 'LINK', 'FILE']),
   displayOrder: z.coerce.number().int().min(0).max(10000),
 });
-export const contentInputSchema = contentBaseSchema.superRefine((value, context) => {
-  if (value.contentType === 'TEXT' && !value.bodyText)
-    context.addIssue({
-      code: 'custom',
-      path: ['bodyText'],
-      message: 'Text content requires bodyText',
-    });
-});
+export const contentInputSchema = contentBaseSchema
+  .extend({
+    sectionId: id.optional(),
+    courseId: id.optional(),
+  })
+  .superRefine((value, context) => {
+    if (!value.sectionId && !value.courseId)
+      context.addIssue({
+        code: 'custom',
+        path: ['sectionId'],
+        message: 'A section or course is required',
+      });
+    if (value.contentType === 'TEXT' && !value.bodyText)
+      context.addIssue({
+        code: 'custom',
+        path: ['bodyText'],
+        message: 'Text content requires bodyText',
+      });
+  });
 export const contentUpdateSchema = contentBaseSchema.partial();
 export const attachmentInputSchema = z
   .object({

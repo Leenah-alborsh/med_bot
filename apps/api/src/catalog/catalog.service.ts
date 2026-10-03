@@ -175,7 +175,9 @@ export class CatalogService {
         displayOrder: true,
         isActive: true,
         archivedAt: true,
-        course: { select: { semester: { select: { id: true, academicYearId: true } } } },
+        course: {
+          select: { hasSections: true, semester: { select: { id: true, academicYearId: true } } },
+        },
       },
       orderBy: [{ courseId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
     });
@@ -184,6 +186,7 @@ export class CatalogService {
       botId: bot.id,
       academicYearId: course.semester.academicYearId,
       semesterId: course.semester.id,
+      courseHasSections: course.hasSections,
     }));
     return this.page(await this.visible(actor, shaped), query);
   }
@@ -244,28 +247,36 @@ export class CatalogService {
   ) {
     const scope = await this.scopeForInput(kind, input);
     await this.scopes.assertResourceAccess(actor, scope);
+    const normalizedInput =
+      kind === 'content-type' ? await this.withContentTypeSection(input) : input;
     return this.prisma.$transaction(async (tx) => {
       let row: { id: string };
       if (kind === 'year')
         row = await tx.academicYear.create({
-          data: input as Prisma.AcademicYearUncheckedCreateInput,
+          data: normalizedInput as Prisma.AcademicYearUncheckedCreateInput,
         });
       else if (kind === 'semester')
-        row = await tx.semester.create({ data: input as Prisma.SemesterUncheckedCreateInput });
+        row = await tx.semester.create({
+          data: normalizedInput as Prisma.SemesterUncheckedCreateInput,
+        });
       else if (kind === 'course')
-        row = await tx.course.create({ data: input as Prisma.CourseUncheckedCreateInput });
+        row = await tx.course.create({
+          data: normalizedInput as Prisma.CourseUncheckedCreateInput,
+        });
       else if (kind === 'section')
-        row = await tx.section.create({ data: input as Prisma.SectionUncheckedCreateInput });
+        row = await tx.section.create({
+          data: normalizedInput as Prisma.SectionUncheckedCreateInput,
+        });
       else
         row = await tx.contentCategory.create({
-          data: input as Prisma.ContentCategoryUncheckedCreateInput,
+          data: normalizedInput as Prisma.ContentCategoryUncheckedCreateInput,
         });
       await this.audit.record({
         actorId: actor.id,
         actionKey: 'catalog.create',
         entityType: kind,
         entityId: row.id,
-        after: input,
+        after: normalizedInput,
         metadata,
         client: tx,
       });
@@ -366,6 +377,40 @@ export class CatalogService {
       return { deleted: true };
     });
   }
+  private async withContentTypeSection(input: Record<string, unknown>) {
+    if (input.sectionId) return input;
+    if (typeof input.courseId !== 'string')
+      throw new BadRequestException('sectionId or courseId is required');
+    const section = await this.ensureCourseContentSection(input.courseId);
+    const rest = { ...input };
+    delete rest.courseId;
+    return { ...rest, sectionId: section.id };
+  }
+
+  private async ensureCourseContentSection(courseId: string) {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, nameAr: true, nameEn: true, hasSections: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    if (course.hasSections) throw new BadRequestException('Section is required for this course');
+    const existing = await this.prisma.section.findFirst({
+      where: { courseId },
+      orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    if (existing) return existing;
+    return this.prisma.section.create({
+      data: {
+        courseId,
+        nameAr: course.nameAr,
+        nameEn: '__course__',
+        displayOrder: 0,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+  }
   private async mainBot() {
     const bot = await this.prisma.bot.findUnique({
       where: { key: 'medical-main' },
@@ -388,6 +433,18 @@ export class CatalogService {
       return { botId: bot.id, academicYearId: semester.academicYearId };
     }
     if (kind === 'content-type') {
+      if (!input.sectionId && typeof input.courseId === 'string') {
+        const course = await this.prisma.course.findUnique({
+          where: { id: input.courseId },
+          select: { id: true, semester: { select: { academicYearId: true } } },
+        });
+        if (!course) throw new NotFoundException('Course not found');
+        return {
+          botId: bot.id,
+          academicYearId: course.semester.academicYearId,
+          courseId: course.id,
+        };
+      }
       const section = await this.prisma.section.findUnique({
         where: { id: String(input.sectionId) },
         select: {

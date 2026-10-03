@@ -3,7 +3,11 @@
 import { FileUp, UploadCloud } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MEGABYTES } from '../lib/upload-limits';
+import {
+  DIRECT_UPLOAD_TOO_LARGE_MESSAGE,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_MEGABYTES,
+} from '../lib/upload-limits';
 
 export type UploadTarget = {
   id: string;
@@ -33,7 +37,7 @@ export function AdminFileUploader({ items }: { items: UploadTarget[] }) {
 
     const oversized = files.find((file) => file.size > MAX_UPLOAD_BYTES);
     if (oversized) {
-      setMessage(`الملف ${oversized.name} يتجاوز الحد الأقصى المسموح ${MAX_UPLOAD_MEGABYTES}MB.`);
+      setMessage(DIRECT_UPLOAD_TOO_LARGE_MESSAGE);
       return;
     }
 

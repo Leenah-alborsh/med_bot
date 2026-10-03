@@ -1,12 +1,6 @@
 import { z } from 'zod';
 
-export const MAX_UPLOAD_BYTES = 2_000_000_000;
-
-function telegramApiRoot(value: unknown) {
-  if (typeof value !== 'string' || !value.trim()) return undefined;
-  const root = value.trim();
-  return root.includes('://') ? root : 'http://' + root;
-}
+export const MAX_UPLOAD_BYTES = 50_000_000;
 
 const environmentSchema = z
   .object({
@@ -30,7 +24,6 @@ const environmentSchema = z
     TELEGRAM_WEBHOOK_URL: z.string().url().optional(),
     RENDER_EXTERNAL_URL: z.string().url().optional(),
     MEDICAL_BOT_TOKEN: z.string().trim().min(1).optional(),
-    TELEGRAM_API_ROOT: z.preprocess(telegramApiRoot, z.string().url().optional()),
     TELEGRAM_FILE_CHANNEL_ID: z
       .string()
       .trim()
@@ -58,6 +51,12 @@ const environmentSchema = z
         code: 'custom',
         path: ['TELEGRAM_WEBHOOK_SECRET'],
         message: 'Required for webhook mode',
+      });
+    if (!environment.TELEGRAM_FILE_CHANNEL_ID)
+      context.addIssue({
+        code: 'custom',
+        path: ['TELEGRAM_FILE_CHANNEL_ID'],
+        message: 'Required for Telegram Channel Inbox',
       });
     if (!environment.TELEGRAM_WEBHOOK_URL && !environment.RENDER_EXTERNAL_URL)
       context.addIssue({

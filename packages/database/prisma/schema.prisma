@@ -69,6 +69,11 @@ enum AnnouncementStatus {
   FAILED
 }
 
+enum TelegramInboxStatus {
+  UNCLASSIFIED
+  CLASSIFIED
+}
+
 model Bot {
   id                 String                 @id @default(uuid()) @db.Uuid
   key                String                 @unique
@@ -247,30 +252,31 @@ model ContentCategory {
 }
 
 model AdminUser {
-  id                  String              @id @default(uuid()) @db.Uuid
-  email               String              @unique
-  passwordHash        String?
-  telegramUserId      BigInt?             @unique
-  displayNameAr       String
-  displayNameEn       String
-  status              AdminStatus         @default(PENDING)
-  mustChangePassword  Boolean             @default(true)
-  lastLoginAt         DateTime?
-  failedLoginCount    Int                 @default(0)
-  lockedUntil         DateTime?
-  passwordChangedAt   DateTime?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  roles               AdminRole[]
-  scopes              AdminScope[]
-  auditLogs           AuditLog[]
-  sessions            AdminSession[]
-  setupTokens         AdminSetupToken[]
-  createdContent      ContentItem[]       @relation("ContentCreatedBy")
-  updatedContent      ContentItem[]       @relation("ContentUpdatedBy")
-  uploadedAttachments ContentAttachment[] @relation("AttachmentUploadedBy")
-  reviewedReports     BrokenFileReport[]  @relation("ReportReviewedBy")
-  announcements       Announcement[]
+  id                   String                @id @default(uuid()) @db.Uuid
+  email                String                @unique
+  passwordHash         String?
+  telegramUserId       BigInt?               @unique
+  displayNameAr        String
+  displayNameEn        String
+  status               AdminStatus           @default(PENDING)
+  mustChangePassword   Boolean               @default(true)
+  lastLoginAt          DateTime?
+  failedLoginCount     Int                   @default(0)
+  lockedUntil          DateTime?
+  passwordChangedAt    DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  roles                AdminRole[]
+  scopes               AdminScope[]
+  auditLogs            AuditLog[]
+  sessions             AdminSession[]
+  setupTokens          AdminSetupToken[]
+  createdContent       ContentItem[]         @relation("ContentCreatedBy")
+  updatedContent       ContentItem[]         @relation("ContentUpdatedBy")
+  uploadedAttachments  ContentAttachment[]   @relation("AttachmentUploadedBy")
+  reviewedReports      BrokenFileReport[]    @relation("ReportReviewedBy")
+  announcements        Announcement[]
+  classifiedInboxFiles TelegramChannelFile[] @relation("InboxClassifiedBy")
 
   @@index([status])
 }
@@ -420,6 +426,7 @@ model ContentItem {
   id                String               @id @default(uuid()) @db.Uuid
   sectionId         String               @db.Uuid
   contentCategoryId String               @db.Uuid
+  telegramLinkCode  String?              @unique
   titleAr           String
   titleEn           String?
   descriptionAr     String?
@@ -442,6 +449,7 @@ model ContentItem {
   attachments       ContentAttachment[]
   accessEvents      ContentAccessEvent[]
   reports           BrokenFileReport[]
+  sourceInboxFile   TelegramChannelFile? @relation("InboxContentItem")
 
   @@unique([contentCategoryId, displayOrder])
   @@index([sectionId, state, isActive, displayOrder])
@@ -450,8 +458,8 @@ model ContentItem {
 }
 
 model ContentAttachment {
-  id                   String             @id @default(uuid()) @db.Uuid
-  contentItemId        String             @db.Uuid
+  id                   String               @id @default(uuid()) @db.Uuid
+  contentItemId        String               @db.Uuid
   storageProvider      StorageProvider
   originalFilename     String
   storedPath           String?
@@ -463,18 +471,49 @@ model ContentAttachment {
   mimeType             String
   fileSize             BigInt
   checksum             String?
-  version              Int                @default(1)
-  isCurrent            Boolean            @default(true)
+  version              Int                  @default(1)
+  isCurrent            Boolean              @default(true)
   archivedAt           DateTime?
-  uploadedById         String?            @db.Uuid
-  createdAt            DateTime           @default(now())
-  contentItem          ContentItem        @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
-  uploadedBy           AdminUser?         @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedById         String?              @db.Uuid
+  createdAt            DateTime             @default(now())
+  contentItem          ContentItem          @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  uploadedBy           AdminUser?           @relation("AttachmentUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
   reports              BrokenFileReport[]
+  sourceInboxFile      TelegramChannelFile? @relation("InboxAttachment")
 
   @@unique([contentItemId, checksum])
   @@index([contentItemId, storageProvider])
   @@index([contentItemId, isCurrent, version])
+  @@index([storageChatId, storageMessageId])
+}
+
+model TelegramChannelFile {
+  id                   String              @id @default(uuid()) @db.Uuid
+  storageChatId        BigInt
+  storageMessageId     Int
+  telegramFileId       String
+  telegramFileUniqueId String
+  fileName             String
+  mimeType             String
+  fileSize             BigInt
+  mediaType            String
+  linkCode             String?
+  receivedAt           DateTime
+  status               TelegramInboxStatus @default(UNCLASSIFIED)
+  contentItemId        String?             @unique @db.Uuid
+  attachmentId         String?             @unique @db.Uuid
+  classifiedById       String?             @db.Uuid
+  classifiedAt         DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  contentItem          ContentItem?        @relation("InboxContentItem", fields: [contentItemId], references: [id], onDelete: SetNull)
+  attachment           ContentAttachment?  @relation("InboxAttachment", fields: [attachmentId], references: [id], onDelete: SetNull)
+  classifiedBy         AdminUser?          @relation("InboxClassifiedBy", fields: [classifiedById], references: [id], onDelete: SetNull)
+
+  @@unique([storageChatId, storageMessageId])
+  @@index([status, receivedAt])
+  @@index([linkCode])
+  @@index([telegramFileUniqueId])
 }
 
 model ContentAccessEvent {
