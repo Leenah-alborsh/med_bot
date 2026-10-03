@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { AdminSummary } from '@medical/shared';
+import { cache } from 'react';
 
 const baseUrl =
   process.env.API_INTERNAL_BASE_URL ??
@@ -18,10 +19,11 @@ export async function serverApi<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function getCurrentAdmin(): Promise<AdminSummary & { roleKeys: string[] }> {
+// Deduplicate layout/page authentication only within the current server render.
+export const getCurrentAdmin = cache(async (): Promise<AdminSummary & { roleKeys: string[] }> => {
   const result = await serverApi<{ admin: AdminSummary & { roleKeys: string[] } }>('auth/me');
   return result.admin;
-}
+});
 
 export function hasPermission(
   admin: AdminSummary,

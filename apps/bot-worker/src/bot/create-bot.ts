@@ -80,22 +80,24 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
 
   const identify = async (ctx: Context): Promise<Identity> => {
     if (!ctx.from) throw new Error('Telegram user context is missing');
-    const student = await prisma.student.upsert({
-      where: { telegramUserId: BigInt(ctx.from.id) },
-      update: {
-        username: ctx.from.username,
-        firstName: ctx.from.first_name,
-        lastName: ctx.from.last_name,
-        lastSeenAt: new Date(),
-      },
-      create: {
-        telegramUserId: BigInt(ctx.from.id),
-        username: ctx.from.username,
-        firstName: ctx.from.first_name,
-        lastName: ctx.from.last_name,
-      },
-    });
-    const configuredBot = await prisma.bot.findUniqueOrThrow({ where: { key: 'medical-main' } });
+    const [student, configuredBot] = await Promise.all([
+      prisma.student.upsert({
+        where: { telegramUserId: BigInt(ctx.from.id) },
+        update: {
+          username: ctx.from.username,
+          firstName: ctx.from.first_name,
+          lastName: ctx.from.last_name,
+          lastSeenAt: new Date(),
+        },
+        create: {
+          telegramUserId: BigInt(ctx.from.id),
+          username: ctx.from.username,
+          firstName: ctx.from.first_name,
+          lastName: ctx.from.last_name,
+        },
+      }),
+      prisma.bot.findUniqueOrThrow({ where: { key: 'medical-main' }, select: { id: true } }),
+    ]);
     const membership = await prisma.studentBotMembership.upsert({
       where: { studentId_botId: { studentId: student.id, botId: configuredBot.id } },
       update: { lastInteraction: new Date() },
@@ -126,6 +128,7 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
       case 'YEAR': {
         if (!membership.navigationStage) return [];
         const rows = await prisma.academicYear.findMany({
+          select: { id: true, nameAr: true },
           where: {
             number: { gte: membership.navigationStage, lte: membership.navigationStage + 2 },
             isActive: true,
@@ -139,6 +142,7 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
       case 'SEMESTER': {
         if (!membership.navigationYearId) return [];
         const rows = await prisma.semester.findMany({
+          select: { id: true, nameAr: true },
           where: {
             academicYearId: membership.navigationYearId,
             isActive: true,
@@ -156,6 +160,7 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
       case 'COURSE': {
         if (!membership.navigationSemesterId) return [];
         const rows = await prisma.course.findMany({
+          select: { id: true, nameAr: true },
           where: {
             semesterId: membership.navigationSemesterId,
             isActive: true,
@@ -169,6 +174,7 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
       case 'SECTION': {
         if (!membership.navigationCourseId) return [];
         const rows = await prisma.section.findMany({
+          select: { id: true, nameAr: true },
           where: {
             courseId: membership.navigationCourseId,
             isActive: true,
@@ -182,6 +188,7 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
       case 'CONTENT_CATEGORY': {
         if (!membership.navigationCourseId) return [];
         const rows = await prisma.contentCategory.findMany({
+          select: { id: true, nameAr: true },
           where: {
             section: {
               ...(membership.navigationSectionId
@@ -208,6 +215,7 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
       case 'CONTENT': {
         if (!membership.navigationSectionId || !membership.navigationContentCategoryId) return [];
         const rows = await prisma.contentItem.findMany({
+          select: { id: true, titleAr: true },
           where: {
             ...publishedContentWhere(membership.navigationSectionId),
             contentCategoryId: membership.navigationContentCategoryId,

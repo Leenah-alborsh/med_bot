@@ -45,105 +45,123 @@ export class ContentService {
     private readonly uploadTickets: UploadTicketService,
   ) {}
 
-  async list(query: ListContentInput, actor: Actor) {
-    const rows = await this.prisma.contentItem.findMany({
-      where: {
-        ...(query.sectionId ? { sectionId: query.sectionId } : {}),
-        ...(query.contentCategoryId ? { contentCategoryId: query.contentCategoryId } : {}),
-        ...(query.courseId ? { section: { courseId: query.courseId } } : {}),
-        ...(query.semesterId ? { section: { course: { semesterId: query.semesterId } } } : {}),
-        ...(query.yearId
-          ? { section: { course: { semester: { academicYearId: query.yearId } } } }
-          : {}),
-        ...(query.state ? { state: query.state } : {}),
-        ...(query.type ? { contentType: query.type } : {}),
-        ...(query.search
-          ? {
-              OR: [
-                { titleAr: { contains: query.search, mode: 'insensitive' } },
-                { titleEn: { contains: query.search, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      select: {
-        id: true,
-        sectionId: true,
-        titleAr: true,
-        titleEn: true,
-        telegramLinkCode: true,
-        descriptionAr: true,
-        descriptionEn: true,
-        bodyText: true,
-        contentType: true,
-        contentCategoryId: true,
-        contentCategory: { select: { nameAr: true, nameEn: true } },
-        state: true,
-        isActive: true,
-        displayOrder: true,
-        publishedAt: true,
-        archivedAt: true,
-        createdAt: true,
-        updatedAt: true,
+  private async scopeWhere(actor: Actor): Promise<Prisma.ContentItemWhereInput> {
+    if (actor.roleKeys.includes(SUPER_ADMIN_ROLE_KEY)) return {};
+    const scopes = await this.prisma.adminScope.findMany({
+      where: { adminUserId: actor.id },
+      select: { botId: true, academicYearId: true, courseId: true },
+    });
+    if (!scopes.length) return {};
+    const bot = await this.mainBot();
+    const allowed = scopes.filter((scope) => scope.botId === null || scope.botId === bot.id);
+    if (!allowed.length) return { id: { in: [] } };
+    return {
+      OR: allowed.map((scope) => ({
         section: {
-          select: {
-            nameAr: true,
-            course: {
-              select: {
-                id: true,
-                nameAr: true,
-                semester: { select: { id: true, academicYearId: true } },
+          ...(scope.courseId !== null ? { courseId: scope.courseId } : {}),
+          ...(scope.academicYearId !== null
+            ? { course: { semester: { academicYearId: scope.academicYearId } } }
+            : {}),
+        },
+      })),
+    };
+  }
+
+  async list(query: ListContentInput, actor: Actor) {
+    const where: Prisma.ContentItemWhereInput = {
+      AND: [
+        await this.scopeWhere(actor),
+        {
+          ...(query.sectionId ? { sectionId: query.sectionId } : {}),
+          ...(query.contentCategoryId ? { contentCategoryId: query.contentCategoryId } : {}),
+          ...(query.courseId ? { section: { courseId: query.courseId } } : {}),
+          ...(query.semesterId ? { section: { course: { semesterId: query.semesterId } } } : {}),
+          ...(query.yearId
+            ? { section: { course: { semester: { academicYearId: query.yearId } } } }
+            : {}),
+          ...(query.state ? { state: query.state } : {}),
+          ...(query.type ? { contentType: query.type } : {}),
+          ...(query.search
+            ? {
+                OR: [
+                  { titleAr: { contains: query.search, mode: 'insensitive' } },
+                  { titleEn: { contains: query.search, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+        },
+      ],
+    };
+    const [total, rows] = await Promise.all([
+      this.prisma.contentItem.count({ where }),
+      this.prisma.contentItem.findMany({
+        where,
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        select: {
+          id: true,
+          sectionId: true,
+          titleAr: true,
+          titleEn: true,
+          telegramLinkCode: true,
+          descriptionAr: true,
+          descriptionEn: true,
+          bodyText: true,
+          contentType: true,
+          contentCategoryId: true,
+          contentCategory: { select: { nameAr: true, nameEn: true } },
+          state: true,
+          isActive: true,
+          displayOrder: true,
+          publishedAt: true,
+          archivedAt: true,
+          createdAt: true,
+          updatedAt: true,
+          section: {
+            select: {
+              nameAr: true,
+              course: {
+                select: {
+                  id: true,
+                  nameAr: true,
+                  semester: { select: { id: true, academicYearId: true } },
+                },
               },
             },
           },
-        },
-        attachments: {
-          select: {
-            id: true,
-            storageProvider: true,
-            originalFilename: true,
-            externalUrl: true,
-            telegramFileId: true,
-            telegramFileUniqueId: true,
-            storageMessageId: true,
-            version: true,
-            isCurrent: true,
-            mimeType: true,
-            fileSize: true,
-            createdAt: true,
+          attachments: {
+            select: {
+              id: true,
+              storageProvider: true,
+              originalFilename: true,
+              externalUrl: true,
+              telegramFileId: true,
+              telegramFileUniqueId: true,
+              storageMessageId: true,
+              version: true,
+              isCurrent: true,
+              mimeType: true,
+              fileSize: true,
+              createdAt: true,
+            },
           },
         },
-      },
-      orderBy: [{ sectionId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
-    });
-    const bot = await this.mainBot();
-    const visible = actor.roleKeys.includes(SUPER_ADMIN_ROLE_KEY) ? rows : [];
-    if (!actor.roleKeys.includes(SUPER_ADMIN_ROLE_KEY)) {
-      for (const row of rows) {
-        try {
-          await this.scopes.assertResourceAccess(actor, {
-            botId: bot.id,
-            academicYearId: row.section.course.semester.academicYearId,
-            courseId: row.section.course.id,
-          });
-          visible.push(row);
-        } catch {
-          /* Omit resources outside scope. */
-        }
-      }
-    }
-    const start = (query.page - 1) * query.pageSize;
+        orderBy: [{ sectionId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
+      }),
+    ]);
     return {
-      items: visible.slice(start, start + query.pageSize).map((row) => this.serialize(row)),
-      total: visible.length,
+      items: rows.map((row) => this.serialize(row)),
+      total,
       page: query.page,
       pageSize: query.pageSize,
     };
   }
 
   async uploadTargets(actor: Actor) {
+    const scope = await this.scopeWhere(actor);
     const rows = await this.prisma.contentItem.findMany({
       where: {
+        AND: [scope],
         contentType: 'FILE',
         isActive: true,
         archivedAt: null,
@@ -171,23 +189,7 @@ export class ContentService {
       },
       orderBy: [{ sectionId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
     });
-    if (actor.roleKeys.includes(SUPER_ADMIN_ROLE_KEY)) return { items: rows };
-
-    const bot = await this.mainBot();
-    const items = [];
-    for (const row of rows) {
-      try {
-        await this.scopes.assertResourceAccess(actor, {
-          botId: bot.id,
-          academicYearId: row.section.course.semester.academicYearId,
-          courseId: row.section.course.id,
-        });
-        items.push(row);
-      } catch {
-        /* Omit upload targets outside the admin's assigned scope. */
-      }
-    }
-    return { items };
+    return { items: rows };
   }
 
   async get(id: string, actor: Actor) {

@@ -46,17 +46,23 @@ describe('admin file upload access', () => {
     };
     const service = createService({
       prisma: {
-        contentItem: { findMany: vi.fn().mockResolvedValue([legacy]) },
+        contentItem: {
+          findMany: vi.fn().mockResolvedValue([legacy]),
+          count: vi.fn().mockResolvedValue(1),
+        },
         bot: { findUnique: vi.fn().mockResolvedValue({ id: 'bot' }) },
       },
       scopes: {},
       tickets: {},
     });
 
-    const result = await service.list({ page: 1, pageSize: 20 } as never, {
-      id: 'admin',
-      roleKeys: ['super-admin'],
-    });
+    const result = await service.list(
+      { page: 1, pageSize: 20 },
+      {
+        id: 'admin',
+        roleKeys: ['super-admin'],
+      },
+    );
 
     expect(result.items).toEqual([
       expect.objectContaining({
@@ -96,22 +102,37 @@ describe('admin file upload access', () => {
         },
       },
     };
-    const assertResourceAccess = vi.fn().mockResolvedValue(undefined);
+    const findMany = vi.fn().mockResolvedValue([row]);
     const service = createService({
       prisma: {
-        contentItem: { findMany: vi.fn().mockResolvedValue([row]) },
+        contentItem: { findMany },
+        adminScope: {
+          findMany: vi
+            .fn()
+            .mockResolvedValue([{ botId: 'bot', academicYearId: 'year', courseId: 'course' }]),
+        },
         bot: { findUnique: vi.fn().mockResolvedValue({ id: 'bot' }) },
       },
-      scopes: { assertResourceAccess },
+      scopes: {},
       tickets: {},
     });
 
     await expect(service.uploadTargets(admin)).resolves.toEqual({ items: [row] });
-    expect(assertResourceAccess).toHaveBeenCalledWith(admin, {
-      botId: 'bot',
-      academicYearId: 'year',
-      courseId: 'course',
-    });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: [
+            {
+              OR: [
+                {
+                  section: { courseId: 'course', course: { semester: { academicYearId: 'year' } } },
+                },
+              ],
+            },
+          ],
+        }) as unknown,
+      }),
+    );
   });
 
   it('issues tickets only for file content', async () => {
