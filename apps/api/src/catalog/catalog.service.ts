@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@medical/database';
 import { SUPER_ADMIN_ROLE_KEY } from '@medical/shared';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -249,39 +254,41 @@ export class CatalogService {
     await this.scopes.assertResourceAccess(actor, scope);
     const normalizedInput =
       kind === 'content-type' ? await this.withContentTypeSection(input) : input;
-    return this.prisma.$transaction(async (tx) => {
-      let row: { id: string };
-      if (kind === 'year')
-        row = await tx.academicYear.create({
-          data: normalizedInput as Prisma.AcademicYearUncheckedCreateInput,
+    return this.prisma
+      .$transaction(async (tx) => {
+        let row: { id: string };
+        if (kind === 'year')
+          row = await tx.academicYear.create({
+            data: normalizedInput as Prisma.AcademicYearUncheckedCreateInput,
+          });
+        else if (kind === 'semester')
+          row = await tx.semester.create({
+            data: normalizedInput as Prisma.SemesterUncheckedCreateInput,
+          });
+        else if (kind === 'course')
+          row = await tx.course.create({
+            data: normalizedInput as Prisma.CourseUncheckedCreateInput,
+          });
+        else if (kind === 'section')
+          row = await tx.section.create({
+            data: normalizedInput as Prisma.SectionUncheckedCreateInput,
+          });
+        else
+          row = await tx.contentCategory.create({
+            data: normalizedInput as Prisma.ContentCategoryUncheckedCreateInput,
+          });
+        await this.audit.record({
+          actorId: actor.id,
+          actionKey: 'catalog.create',
+          entityType: kind,
+          entityId: row.id,
+          after: normalizedInput,
+          metadata,
+          client: tx,
         });
-      else if (kind === 'semester')
-        row = await tx.semester.create({
-          data: normalizedInput as Prisma.SemesterUncheckedCreateInput,
-        });
-      else if (kind === 'course')
-        row = await tx.course.create({
-          data: normalizedInput as Prisma.CourseUncheckedCreateInput,
-        });
-      else if (kind === 'section')
-        row = await tx.section.create({
-          data: normalizedInput as Prisma.SectionUncheckedCreateInput,
-        });
-      else
-        row = await tx.contentCategory.create({
-          data: normalizedInput as Prisma.ContentCategoryUncheckedCreateInput,
-        });
-      await this.audit.record({
-        actorId: actor.id,
-        actionKey: 'catalog.create',
-        entityType: kind,
-        entityId: row.id,
-        after: normalizedInput,
-        metadata,
-        client: tx,
-      });
-      return row;
-    });
+        return row;
+      })
+      .catch((error: unknown) => this.rethrowContentTypeConflict(kind, error));
   }
 
   async update(
@@ -293,26 +300,29 @@ export class CatalogService {
   ) {
     const scope = await this.scopeForExisting(kind, id);
     await this.scopes.assertResourceAccess(actor, scope);
-    return this.prisma.$transaction(async (tx) => {
-      const before = await this.findExisting(kind, id, tx);
-      let row: { id: string };
-      if (kind === 'year') row = await tx.academicYear.update({ where: { id }, data: input });
-      else if (kind === 'semester') row = await tx.semester.update({ where: { id }, data: input });
-      else if (kind === 'course') row = await tx.course.update({ where: { id }, data: input });
-      else if (kind === 'section') row = await tx.section.update({ where: { id }, data: input });
-      else row = await tx.contentCategory.update({ where: { id }, data: input });
-      await this.audit.record({
-        actorId: actor.id,
-        actionKey: input.displayOrder === undefined ? 'catalog.update' : 'catalog.reorder',
-        entityType: kind,
-        entityId: id,
-        before,
-        after: row,
-        metadata,
-        client: tx,
-      });
-      return row;
-    });
+    return this.prisma
+      .$transaction(async (tx) => {
+        const before = await this.findExisting(kind, id, tx);
+        let row: { id: string };
+        if (kind === 'year') row = await tx.academicYear.update({ where: { id }, data: input });
+        else if (kind === 'semester')
+          row = await tx.semester.update({ where: { id }, data: input });
+        else if (kind === 'course') row = await tx.course.update({ where: { id }, data: input });
+        else if (kind === 'section') row = await tx.section.update({ where: { id }, data: input });
+        else row = await tx.contentCategory.update({ where: { id }, data: input });
+        await this.audit.record({
+          actorId: actor.id,
+          actionKey: input.displayOrder === undefined ? 'catalog.update' : 'catalog.reorder',
+          entityType: kind,
+          entityId: id,
+          before,
+          after: row,
+          metadata,
+          client: tx,
+        });
+        return row;
+      })
+      .catch((error: unknown) => this.rethrowContentTypeConflict(kind, error));
   }
 
   async archive(
@@ -385,6 +395,18 @@ export class CatalogService {
     const rest = { ...input };
     delete rest.courseId;
     return { ...rest, sectionId: section.id };
+  }
+  private rethrowContentTypeConflict(kind: string, error: unknown): never {
+    if (
+      kind === 'content-type' &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      throw new ConflictException(
+        'ترتيب العرض مستخدم مسبقًا داخل المادة أو القسم المحدد. اختر رقمًا آخر.',
+      );
+    }
+    throw error;
   }
 
   private async ensureCourseContentSection(courseId: string) {

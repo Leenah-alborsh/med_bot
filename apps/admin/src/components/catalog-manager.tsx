@@ -57,6 +57,7 @@ export function CatalogManager({
 }) {
   const router = useRouter();
   const [message, setMessage] = useState('');
+  const [creating, setCreating] = useState(false);
   const [selectedYearId, setSelectedYearId] = useState('');
   const [selectedContentCourseId, setSelectedContentCourseId] = useState('');
   const [filterYearId, setFilterYearId] = useState('');
@@ -117,6 +118,7 @@ export function CatalogManager({
   );
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (creating) return;
     setMessage('');
     const form = event.currentTarget;
     const data = new FormData(form);
@@ -132,14 +134,26 @@ export function CatalogManager({
       else body.sectionId = data.get('sectionId');
     } else body[parentKey] = data.get(parentKey);
     if (kind === 'courses') body.hasSections = data.get('hasSections') === 'on';
+    setCreating(true);
     try {
-      await clientApi(`catalog/${kind}`, { method: 'POST', body: JSON.stringify(body) });
+      const created = await clientApi<Item>(`catalog/${kind}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      if (kind === 'content-types' && selectedContentCourse) {
+        setFilterYearId(selectedContentCourse.academicYearId ?? '');
+        setFilterSemesterId(selectedContentCourse.semesterId ?? '');
+        setFilterCourseId(selectedContentCourse.id);
+        setFilterSectionId(created.sectionId ?? '');
+      }
       form.reset();
       setSelectedContentCourseId('');
       setMessage('تم الحفظ بنجاح.');
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'تعذر الحفظ.');
+    } finally {
+      setCreating(false);
     }
   }
   async function saveEdit(event: FormEvent<HTMLFormElement>) {
@@ -541,9 +555,9 @@ export function CatalogManager({
               {message}
             </p>
           )}
-          <button className="primary" type="submit">
+          <button className="primary" type="submit" disabled={creating}>
             <Plus size={17} />
-            حفظ
+            {creating ? 'جارٍ الحفظ...' : 'حفظ'}
           </button>
         </form>
       </section>

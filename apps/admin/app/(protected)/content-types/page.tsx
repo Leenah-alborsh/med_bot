@@ -1,5 +1,5 @@
 import { CatalogManager } from '../../../src/components/catalog-manager';
-import { serverApi } from '../../../src/lib/server-api';
+import { allCatalogItems } from '../../../src/lib/catalog-items';
 type Item = {
   id: string;
   nameAr: string;
@@ -10,15 +10,16 @@ type Item = {
   semesterId?: string;
   courseId?: string;
   sectionId?: string;
+  hasSections?: boolean;
 };
 type Option = Item;
 export default async function Page() {
   const [data, sections, courses, semesters, years] = await Promise.all([
-    serverApi<{ items: Item[] }>('catalog/content-types?pageSize=100'),
-    serverApi<{ items: Option[] }>('catalog/sections?pageSize=100&active=true'),
-    serverApi<{ items: Option[] }>('catalog/courses?pageSize=100&active=true'),
-    serverApi<{ items: Option[] }>('catalog/semesters?pageSize=100&active=true'),
-    serverApi<{ items: Option[] }>('catalog/years?pageSize=100&active=true'),
+    allCatalogItems<Item>('content-types'),
+    allCatalogItems<Option>('sections', { active: 'true' }),
+    allCatalogItems<Option>('courses', { active: 'true' }),
+    allCatalogItems<Option>('semesters', { active: 'true' }),
+    allCatalogItems<Option>('years', { active: 'true' }),
   ]);
   return (
     <CatalogManager
