@@ -169,6 +169,10 @@ export class ContentService {
       select: {
         id: true,
         titleAr: true,
+        sectionId: true,
+        contentCategoryId: true,
+        contentCategory: { select: { nameAr: true } },
+        state: true,
         section: {
           select: {
             nameAr: true,
@@ -178,6 +182,8 @@ export class ContentService {
                 nameAr: true,
                 semester: {
                   select: {
+                    id: true,
+                    nameAr: true,
                     academicYearId: true,
                     academicYear: { select: { nameAr: true } },
                   },

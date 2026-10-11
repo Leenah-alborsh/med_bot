@@ -1119,6 +1119,59 @@ code {
 .content-filters {
   grid-template-columns: repeat(4, minmax(150px, 1fr));
 }
+.upload-filter-panel {
+  margin-block-end: 24px;
+}
+.upload-search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-block-end: 14px;
+}
+.upload-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding-inline: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.upload-search:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.upload-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.upload-search input:focus {
+  outline: none;
+  box-shadow: none;
+}
+.upload-filters {
+  margin-block-end: 10px;
+}
+.upload-result-count {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.content-row[hidden] {
+  display: none;
+}
+@media (max-width: 760px) {
+  .flow-filters.upload-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .upload-filters label:last-child {
+    grid-column: 1 / -1;
+  }
+}
 @media (max-width: 760px) {
   .flow-filters,
   .content-filters {
