@@ -1,6 +1,7 @@
 import { TelegramInboxManager } from '../../../src/components/telegram-inbox-manager';
 import { getCurrentAdmin, hasPermission, serverApi } from '../../../src/lib/server-api';
 import { allCatalogItems } from '../../../src/lib/catalog-items';
+import { getUploadConfig } from '../../../src/lib/server-upload-config';
 
 type InboxFile = {
   id: string;
@@ -41,15 +42,17 @@ export default async function Page({
   const canUpdate = hasPermission(admin, 'content.update');
   const query = new URLSearchParams({ page: String(page), pageSize: '20' });
   if (search) query.set('search', search);
-  const [inbox, years, semesters, courses, sections, categories, targets] = await Promise.all([
-    serverApi<PageResult<InboxFile>>(`telegram-inbox?${query}`),
-    allCatalogItems<Option>('years', { active: 'true' }),
-    allCatalogItems<Option>('semesters', { active: 'true' }),
-    allCatalogItems<Option>('courses', { active: 'true' }),
-    allCatalogItems<Option>('sections', { active: 'true' }),
-    allCatalogItems<Option>('content-types', { active: 'true' }),
-    canUpdate ? serverApi<{ items: ContentTarget[] }>('content/upload-targets') : { items: [] },
-  ]);
+  const [inbox, years, semesters, courses, sections, categories, targets, uploadConfig] =
+    await Promise.all([
+      serverApi<PageResult<InboxFile>>(`telegram-inbox?${query}`),
+      allCatalogItems<Option>('years', { active: 'true' }),
+      allCatalogItems<Option>('semesters', { active: 'true' }),
+      allCatalogItems<Option>('courses', { active: 'true' }),
+      allCatalogItems<Option>('sections', { active: 'true' }),
+      allCatalogItems<Option>('content-types', { active: 'true' }),
+      canUpdate ? serverApi<{ items: ContentTarget[] }>('content/upload-targets') : { items: [] },
+      getUploadConfig(),
+    ]);
   return (
     <TelegramInboxManager
       items={inbox.items}
@@ -66,6 +69,7 @@ export default async function Page({
       canCreate={canCreate}
       canUpdate={canUpdate}
       canPublish={hasPermission(admin, 'content.publish')}
+      classificationReady={uploadConfig.inboxClassificationAvailable === true}
     />
   );
 }

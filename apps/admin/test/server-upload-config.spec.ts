@@ -18,6 +18,7 @@ describe('rolling deployment upload configuration', () => {
   it('uses the configured limit when available', async () => {
     vi.mocked(serverApi).mockResolvedValue({ maxUploadBytes: 2_000_000_000 });
     expect(await getUploadConfig()).toEqual({ maxUploadBytes: 2_000_000_000 });
+    expect(serverApi).toHaveBeenCalledWith('content/upload-config/dashboard');
   });
   it('retains the cloud limit while the previous API is deployed', async () => {
     vi.mocked(serverApi).mockRejectedValue(new ServerApiError(404));

@@ -52,6 +52,7 @@ type Props = {
   canCreate: boolean;
   canUpdate: boolean;
   canPublish: boolean;
+  classificationReady: boolean;
 };
 
 function formatSize(value: string) {
@@ -78,6 +79,7 @@ export function TelegramInboxManager({
   canCreate,
   canUpdate,
   canPublish,
+  classificationReady,
 }: Props) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState('');
@@ -122,7 +124,14 @@ export function TelegramInboxManager({
 
   async function classify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || saving || !validCategory || (mode === 'attach' && !validTarget)) return;
+    if (
+      !classificationReady ||
+      !selected ||
+      saving ||
+      !validCategory ||
+      (mode === 'attach' && !validTarget)
+    )
+      return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
@@ -175,6 +184,12 @@ export function TelegramInboxManager({
         <span className="metric-inline">{total} غير مصنف</span>
       </header>
 
+      {!classificationReady && (
+        <p className="notice" role="status">
+          تصنيف الملفات غير متاح مؤقتاً لحين اكتمال تحديث الخادم. الملفات الواردة محفوظة.
+        </p>
+      )}
+
       {message ? (
         <p className="notice" role="status">
           {message}
@@ -214,7 +229,7 @@ export function TelegramInboxManager({
                       <button
                         className="icon-button"
                         type="button"
-                        disabled={saving}
+                        disabled={saving || !classificationReady}
                         title="تصنيف"
                         aria-label={`تصنيف ${item.fileName}`}
                         onClick={() => {
@@ -256,7 +271,10 @@ export function TelegramInboxManager({
                 <X size={18} />
               </button>
             </div>
-            <fieldset className="inbox-classification-fields" disabled={saving}>
+            <fieldset
+              className="inbox-classification-fields"
+              disabled={saving || !classificationReady}
+            >
               {canCreate && canUpdate && (
                 <div className="classification-mode" role="group" aria-label="طريقة ربط الملف">
                   <button
@@ -280,7 +298,7 @@ export function TelegramInboxManager({
               <label>
                 السنة الدراسية
                 <select
-                aria-label="السنة الدراسية"
+                  aria-label="السنة الدراسية"
                   value={yearId}
                   onChange={(event) => resetPathAfterYear(event.target.value)}
                   required
@@ -296,7 +314,7 @@ export function TelegramInboxManager({
               <label>
                 الفصل الدراسي
                 <select
-                aria-label="الفصل الدراسي"
+                  aria-label="الفصل الدراسي"
                   value={semesterId}
                   onChange={(event) => {
                     setSemesterId(event.target.value);
@@ -318,7 +336,7 @@ export function TelegramInboxManager({
               <label>
                 المادة
                 <select
-                aria-label="المادة"
+                  aria-label="المادة"
                   value={courseChoice}
                   onChange={(event) => {
                     setCourseChoice(event.target.value);
@@ -341,7 +359,7 @@ export function TelegramInboxManager({
                 <label>
                   القسم
                   <select
-                  aria-label="القسم"
+                    aria-label="القسم"
                     value={sectionChoice}
                     onChange={(event) => {
                       setSectionChoice(event.target.value);
@@ -362,7 +380,7 @@ export function TelegramInboxManager({
               <label>
                 نوع المحتوى
                 <select
-                aria-label="نوع المحتوى"
+                  aria-label="نوع المحتوى"
                   value={categoryId}
                   required
                   disabled={!courseChoice || (hasSections && !sectionChoice)}
@@ -387,7 +405,7 @@ export function TelegramInboxManager({
                   <label>
                     المحتوى
                     <select
-                    aria-label="المحتوى"
+                      aria-label="المحتوى"
                       value={contentId}
                       required
                       disabled={!categoryId}

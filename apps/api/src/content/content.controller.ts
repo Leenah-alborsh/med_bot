@@ -61,10 +61,10 @@ export class ContentController {
   uploadTargets(@CurrentAdmin() actor: AuthenticatedAdmin) {
     return this.content.uploadTargets(actor);
   }
-  @Get('upload-config')
+  @Get(['upload-config', 'upload-config/dashboard'])
   @RequirePermissions('content.read')
   uploadConfig() {
-    return { maxUploadBytes: uploadOptions.limits.fileSize };
+    return { maxUploadBytes: uploadOptions.limits.fileSize, inboxClassificationAvailable: true };
   }
   @Get(':id')
   @RequirePermissions('content.read')
