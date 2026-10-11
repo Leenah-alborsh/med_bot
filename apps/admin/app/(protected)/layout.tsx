@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import {
   BarChart3,
   BookOpen,
@@ -9,17 +8,16 @@ import {
   GraduationCap,
   Inbox,
   LayoutDashboard,
-  Menu,
   Megaphone,
   ScrollText,
   ShieldCheck,
-  Stethoscope,
   Tags,
   UploadCloud,
 } from 'lucide-react';
 import { getCurrentAdmin, hasPermission } from '../../src/lib/server-api';
 import { LogoutButton } from '../../src/components/logout-button';
-import { ActionHistoryControls } from '../../src/components/action-history-controls';
+import { ActiveNavLink } from '../../src/components/active-nav-link';
+import { DashboardShell } from '../../src/components/dashboard-shell';
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const admin = await getCurrentAdmin();
@@ -109,25 +107,45 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       show: hasPermission(admin, 'audit.read'),
     },
   ];
+  const groups = [
+    { label: 'نظرة عامة', paths: ['/dashboard', '/usage'] },
+    {
+      label: 'المكتبة التعليمية',
+      paths: [
+        '/years',
+        '/semesters',
+        '/courses',
+        '/content-types',
+        '/sections',
+        '/content',
+        '/telegram-inbox',
+        '/uploads',
+      ],
+    },
+    { label: 'الإدارة والمتابعة', paths: ['/bot-management', '/reports', '/admins', '/audit'] },
+  ];
+  const visibleNav = nav.filter((item) => item.show);
+  const navigation = groups.map((group) => {
+    const items = visibleNav.filter((item) => group.paths.includes(item.href));
+    return (
+      items.length > 0 && (
+        <div className="nav-group" key={group.label}>
+          <p className="nav-group-label">{group.label}</p>
+          {items.map(({ href, label, icon: Icon }) => (
+            <ActiveNavLink key={href} href={href} title={label}>
+              <Icon size={19} />
+              <span>{label}</span>
+            </ActiveNavLink>
+          ))}
+        </div>
+      )
+    );
+  });
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <Link className="brand" href="/dashboard">
-          <span className="brand-mark">
-            <Stethoscope size={22} />
-          </span>
-          <span>Medical Students Hub</span>
-        </Link>
-        <nav aria-label="التنقل الرئيسي">
-          {nav
-            .filter((item) => item.show)
-            .map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href}>
-                <Icon size={18} />
-                <span>{label}</span>
-              </Link>
-            ))}
-        </nav>
+    <DashboardShell
+      routes={visibleNav.map(({ href, label }) => ({ href, label }))}
+      navigation={navigation}
+      account={
         <div className="account">
           <span className="avatar">{admin.displayNameAr.slice(0, 1)}</span>
           <div>
@@ -136,34 +154,9 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           </div>
           <LogoutButton />
         </div>
-      </aside>
-      <div className="content-shell">
-        <header className="mobile-header">
-          <Link className="brand" href="/dashboard">
-            <Stethoscope size={21} />
-            <span>Medical Students Hub</span>
-          </Link>
-          <details className="mobile-nav">
-            <summary aria-label="فتح القائمة">
-              <Menu size={22} />
-              <span>القائمة</span>
-            </summary>
-            <nav aria-label="التنقل على الهاتف">
-              {nav
-                .filter((item) => item.show)
-                .map(({ href, label, icon: Icon }) => (
-                  <Link key={href} href={href}>
-                    <Icon size={18} />
-                    <span>{label}</span>
-                  </Link>
-                ))}
-              <LogoutButton />
-            </nav>
-          </details>
-        </header>
-        <ActionHistoryControls />
-        {children}
-      </div>
-    </div>
+      }
+    >
+      {children}
+    </DashboardShell>
   );
 }

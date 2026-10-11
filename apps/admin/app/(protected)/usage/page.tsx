@@ -1,4 +1,5 @@
 import { serverApi } from '../../../src/lib/server-api';
+import { DistributionChart } from '../../../src/components/distribution-chart';
 const contentTypeLabels: Record<string, string> = { TEXT: 'نص', LINK: 'رابط', FILE: 'ملف' };
 type Usage = {
   mostUsedCourses: Array<{ courseId: string; nameAr: string; count: number }>;
@@ -21,6 +22,16 @@ export default async function Page() {
           <h1>{t.title}</h1>
         </div>
       </header>
+      <DistributionChart
+        title={t.courses}
+        unit="زيارة"
+        allowDonut={false}
+        items={data.mostUsedCourses.map((row) => ({
+          id: row.courseId,
+          label: row.nameAr,
+          value: row.count,
+        }))}
+      />
       <section className="two-column">
         <div>
           <h2>{t.courses}</h2>

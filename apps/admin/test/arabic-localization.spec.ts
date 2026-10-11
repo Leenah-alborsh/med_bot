@@ -23,6 +23,7 @@ describe('Arabic admin localization', () => {
 
   it('stores key interface labels as real Arabic text', () => {
     const layout = readFileSync(join(adminRoot, 'app', '(protected)', 'layout.tsx'), 'utf8');
+    const brand = readFileSync(join(adminRoot, 'src', 'components', 'hub-brand.tsx'), 'utf8');
     const catalog = readFileSync(
       join(adminRoot, 'src', 'components', 'catalog-manager.tsx'),
       'utf8',
@@ -32,7 +33,7 @@ describe('Arabic admin localization', () => {
       'utf8',
     );
 
-    expect(layout).toContain('Medical Students Hub');
+    expect(brand).toContain('Medical Students Hub');
     expect(layout).toContain('المشرفون');
     expect(catalog).toContain('الاسم بالإنجليزية');
     expect(content).toContain('حفظ كمسودة');

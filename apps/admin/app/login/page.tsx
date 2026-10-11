@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { LoginForm } from './login-form';
+import { HubBrand } from '../../src/components/hub-brand';
 
 export default async function LoginPage({
   searchParams,
@@ -23,7 +24,7 @@ export default async function LoginPage({
   return (
     <main className="login-page">
       <section className="login-panel" aria-labelledby="login-title">
-        <p className="eyebrow">Medical Students Hub</p>
+        <HubBrand />
         <h1 id="login-title">تسجيل دخول الإدارة</h1>
         <p className="muted">استخدم البريد الإلكتروني وكلمة المرور الخاصة بحسابك الإداري.</p>
         <LoginForm setupComplete={setup === 'success'} />

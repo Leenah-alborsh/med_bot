@@ -6,13 +6,19 @@ import {
   FileText,
   GraduationCap,
   UserRoundPlus,
+  ArrowUpLeft,
+  UploadCloud,
+  Inbox,
 } from 'lucide-react';
+import Link from 'next/link';
 import { getCurrentAdmin, hasPermission, serverApi } from '../../../src/lib/server-api';
+import { DistributionChart } from '../../../src/components/distribution-chart';
 
 type Stats = {
   totalUniqueStudents: number;
   newStudents: number;
   recentlyActiveStudents: number;
+  definitions?: { newStudentsDays: number; recentlyActiveDays: number };
   studentsPerBot: Array<{ botId: string; displayName: string; count: number }>;
   studentsPerAcademicYear: Array<{ academicYearId: string; nameAr: string; count: number }>;
 };
@@ -31,21 +37,33 @@ export default async function DashboardPage() {
   ]);
 
   const operational = [
-    years && { label: 'السنوات المتاحة', value: years.total, icon: GraduationCap },
-    courses && { label: 'المواد المتاحة', value: courses.total, icon: BookOpen },
-    sections && { label: 'الأقسام المتاحة', value: sections.total, icon: Boxes },
-    content && { label: 'عناصر المحتوى', value: content.total, icon: FileText },
-  ].filter(Boolean) as Array<{ label: string; value: number; icon: typeof BookOpen }>;
+    years && { label: 'السنوات المتاحة', value: years.total, icon: GraduationCap, href: '/years' },
+    courses && { label: 'المواد المتاحة', value: courses.total, icon: BookOpen, href: '/courses' },
+    sections && { label: 'الأقسام المتاحة', value: sections.total, icon: Boxes, href: '/sections' },
+    content && { label: 'عناصر المحتوى', value: content.total, icon: FileText, href: '/content' },
+  ].filter(Boolean) as Array<{ label: string; value: number; icon: typeof BookOpen; href: string }>;
 
   return (
     <main className="page">
       <header className="page-heading">
         <div>
           <p className="eyebrow">نظرة عامة</p>
-          <h1>الرئيسية</h1>
-          <p className="muted">
-            مرحبًا، {admin.displayNameAr}. البيانات أدناه محدثة من Neon حسب صلاحياتك ونطاق وصولك.
-          </p>
+          <h1>مرحبًا، {admin.displayNameAr}</h1>
+          <p className="muted">المكتبة التعليمية ونشاط الطلاب</p>
+        </div>
+        <div className="dashboard-quick-actions">
+          {hasPermission(admin, 'content.update') && (
+            <Link className="primary" href="/uploads">
+              <UploadCloud size={17} />
+              رفع ملف
+            </Link>
+          )}
+          {canContent && hasPermission(admin, 'content.create') && (
+            <Link className="secondary-action" href="/telegram-inbox">
+              <Inbox size={17} />
+              الملفات الواردة
+            </Link>
+          )}
         </div>
       </header>
 
@@ -56,13 +74,14 @@ export default async function DashboardPage() {
             <h2>المحتوى المتاح لك</h2>
           </div>
           <section className="metric-grid operational-grid">
-            {operational.map(({ label, value, icon: Icon }) => (
-              <article className="metric" key={label}>
+            {operational.map(({ label, value, icon: Icon, href }, index) => (
+              <Link className="metric metric-link" key={label} href={href} data-tone={index}>
                 <span>
                   <Icon size={18} /> {label}
                 </span>
                 <strong>{value}</strong>
-              </article>
+                <ArrowUpLeft className="metric-arrow" size={17} />
+              </Link>
             ))}
           </section>
         </>
@@ -75,59 +94,45 @@ export default async function DashboardPage() {
             <h2>نشاط الطلاب</h2>
           </div>
           <section className="metric-grid">
-            <article className="metric">
+            <article className="metric" data-tone="0">
               <span>
                 <GraduationCap size={18} /> إجمالي الطلاب
               </span>
               <strong>{stats.totalUniqueStudents}</strong>
             </article>
-            <article className="metric">
+            <article className="metric" data-tone="1">
               <span>
-                <UserRoundPlus size={18} /> طلاب جدد
+                <UserRoundPlus size={18} /> طلاب جدد · {stats.definitions?.newStudentsDays ?? 30}{' '}
+                يومًا
               </span>
               <strong>{stats.newStudents}</strong>
             </article>
-            <article className="metric">
+            <article className="metric" data-tone="2">
               <span>
-                <Activity size={18} /> نشطون حديثًا
+                <Activity size={18} /> نشطون · {stats.definitions?.recentlyActiveDays ?? 7} أيام
               </span>
               <strong>{stats.recentlyActiveStudents}</strong>
             </article>
           </section>
-          <section className="two-column">
-            <div>
-              <h2>
-                <Bot size={18} /> الطلاب حسب البوت
-              </h2>
-              <div className="table-wrap">
-                <table>
-                  <tbody>
-                    {stats.studentsPerBot.map((row) => (
-                      <tr key={row.botId}>
-                        <td>{row.displayName}</td>
-                        <td>{row.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div>
-              <h2>الطلاب حسب السنة</h2>
-              <div className="table-wrap">
-                <table>
-                  <tbody>
-                    {stats.studentsPerAcademicYear.map((row) => (
-                      <tr key={row.academicYearId}>
-                        <td>{row.nameAr}</td>
-                        <td>{row.count}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
+          <div className="dashboard-charts">
+            <DistributionChart
+              title="الطلاب حسب السنة الدراسية"
+              items={stats.studentsPerAcademicYear.map((row) => ({
+                id: row.academicYearId,
+                label: row.nameAr,
+                value: row.count,
+              }))}
+            />
+            <DistributionChart
+              title="الطلاب حسب البوت"
+              unit="اشتراك"
+              items={stats.studentsPerBot.map((row) => ({
+                id: row.botId,
+                label: row.displayName,
+                value: row.count,
+              }))}
+            />
+          </div>
         </>
       ) : (
         <p className="permission-note">
