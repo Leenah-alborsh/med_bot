@@ -1,9 +1,10 @@
 'use client';
 
-import { Check, FileArchive, FilePlus2, Search } from 'lucide-react';
+import { Check, FileArchive, FilePlus2, Paperclip, Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { clientApi } from '../lib/client-api';
+import { inboxCategories } from '../lib/inbox-classification';
 
 type InboxFile = {
   id: string;
@@ -20,6 +21,7 @@ type Option = {
   academicYearId?: string;
   semesterId?: string;
   courseId?: string;
+  sectionId?: string;
   hasSections?: boolean;
 };
 
@@ -39,6 +41,17 @@ type Props = {
   semesters: Option[];
   courses: Option[];
   sections: Option[];
+  categories: Option[];
+  targets: Array<{
+    id: string;
+    titleAr: string;
+    sectionId: string;
+    contentCategoryId: string;
+    state: string;
+  }>;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canPublish: boolean;
 };
 
 function formatSize(value: string) {
@@ -60,6 +73,11 @@ export function TelegramInboxManager({
   semesters,
   courses,
   sections,
+  categories,
+  targets,
+  canCreate,
+  canUpdate,
+  canPublish,
 }: Props) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState('');
@@ -67,16 +85,27 @@ export function TelegramInboxManager({
   const [semesterId, setSemesterId] = useState('');
   const [courseChoice, setCourseChoice] = useState('');
   const [sectionChoice, setSectionChoice] = useState('');
-  const [newCourseHasSections, setNewCourseHasSections] = useState(true);
+  const [mode, setMode] = useState<'create' | 'attach'>(canCreate ? 'create' : 'attach');
+  const [categoryId, setCategoryId] = useState('');
+  const [contentId, setContentId] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const selected = items.find((item) => item.id === selectedId);
   const visibleSemesters = semesters.filter((item) => item.academicYearId === yearId);
   const visibleCourses = courses.filter((item) => item.semesterId === semesterId);
   const selectedCourse = courses.find((item) => item.id === courseChoice);
-  const isNewCourse = courseChoice === '__new__';
-  const hasSections = isNewCourse ? newCourseHasSections : selectedCourse?.hasSections !== false;
+  const hasSections = selectedCourse?.hasSections !== false;
   const visibleSections = sections.filter((item) => item.courseId === courseChoice);
+  const visibleCategories = inboxCategories(
+    categories,
+    sections,
+    courseChoice,
+    sectionChoice,
+    hasSections,
+  );
+  const visibleTargets = targets.filter((item) => item.contentCategoryId === categoryId);
+  const validCategory = visibleCategories.some((item) => item.id === categoryId);
+  const validTarget = visibleTargets.some((item) => item.id === contentId);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   function resetPathAfterYear(value: string) {
@@ -84,54 +113,49 @@ export function TelegramInboxManager({
     setSemesterId('');
     setCourseChoice('');
     setSectionChoice('');
+    resetCategory();
+  }
+  function resetCategory() {
+    setCategoryId('');
+    setContentId('');
   }
 
   async function classify(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected || saving || !validCategory || (mode === 'attach' && !validTarget)) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
-    const publish = submitter?.value === 'publish';
-    const body: Record<string, unknown> = {
-      titleAr: data.get('titleAr'),
-      titleEn: data.get('titleEn') || undefined,
-      descriptionAr: data.get('descriptionAr') || undefined,
-      displayOrder: Number(data.get('displayOrder')),
-      publish,
-    };
-    if (isNewCourse) {
-      body.newCourse = {
-        semesterId,
-        nameAr: data.get('courseNameAr'),
-        nameEn: data.get('courseNameEn') || undefined,
-        displayOrder: Number(data.get('courseDisplayOrder')),
-        hasSections: newCourseHasSections,
-      };
-    } else {
-      body.courseId = courseChoice;
-    }
-    if (hasSections) {
-      if (sectionChoice === '__new__') {
-        body.newSection = {
-          nameAr: data.get('sectionNameAr'),
-          nameEn: data.get('sectionNameEn') || undefined,
-          displayOrder: Number(data.get('sectionDisplayOrder')),
-        };
-      } else {
-        body.sectionId = sectionChoice;
-      }
-    }
+    const publish = mode === 'create' && submitter?.value === 'publish' && canPublish;
+    const body: Record<string, unknown> =
+      mode === 'attach'
+        ? { contentItemId: contentId }
+        : {
+            courseId: courseChoice,
+            sectionId: hasSections ? sectionChoice : undefined,
+            contentCategoryId: categoryId,
+            titleAr: data.get('titleAr'),
+            titleEn: data.get('titleEn') || undefined,
+            descriptionAr: data.get('descriptionAr') || undefined,
+            displayOrder: Number(data.get('displayOrder')),
+            publish,
+          };
 
     setSaving(true);
     setMessage('');
     try {
-      await clientApi(`telegram-inbox/${selected.id}/classify`, {
+      await clientApi(`telegram-inbox/${selected.id}/classify-existing`, {
         method: 'POST',
         body: JSON.stringify(body),
       });
       setSelectedId('');
-      setMessage(publish ? 'تم تصنيف الملف ونشره.' : 'تم تصنيف الملف وحفظه كمسودة.');
+      setMessage(
+        mode === 'attach'
+          ? 'تم إرفاق الملف بالمحتوى المحدد.'
+          : publish
+            ? 'تم تصنيف الملف ونشره.'
+            : 'تم تصنيف الملف وحفظه كمسودة.',
+      );
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'تعذر تصنيف الملف.');
@@ -177,7 +201,7 @@ export function TelegramInboxManager({
             </thead>
             <tbody>
               {items.map((item) => (
-                <tr key={item.id}>
+                <tr key={item.id} data-selected={selectedId === item.id}>
                   <td>
                     <strong>{item.fileName}</strong>
                     <span className="table-subtitle">{item.mediaType}</span>
@@ -186,18 +210,21 @@ export function TelegramInboxManager({
                   <td dir="ltr">{formatSize(item.fileSize)}</td>
                   <td>{receivedAtFormatter.format(new Date(item.receivedAt))}</td>
                   <td>
-                    <button
-                      className="icon-button"
-                      type="button"
-                      title="تصنيف"
-                      aria-label={`تصنيف ${item.fileName}`}
-                      onClick={() => {
-                        setSelectedId(item.id);
-                        setMessage('');
-                      }}
-                    >
-                      <FilePlus2 size={17} />
-                    </button>
+                    {(canCreate || canUpdate) && (
+                      <button
+                        className="icon-button"
+                        type="button"
+                        disabled={saving}
+                        title="تصنيف"
+                        aria-label={`تصنيف ${item.fileName}`}
+                        onClick={() => {
+                          setSelectedId(item.id);
+                          setMessage('');
+                        }}
+                      >
+                        <FilePlus2 size={17} />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -207,171 +234,232 @@ export function TelegramInboxManager({
         </div>
 
         {selected ? (
-          <form className="editor-panel form inbox-classifier" onSubmit={classify}>
+          <form
+            key={`${selected.id}-${mode}`}
+            className="editor-panel form inbox-classifier"
+            onSubmit={classify}
+          >
             <div className="section-title">
               <FileArchive size={18} />
               <div>
                 <h2>تصنيف الملف</h2>
                 <small>{selected.fileName}</small>
               </div>
+              <button
+                className="icon-button dismiss"
+                type="button"
+                title="إغلاق"
+                aria-label="إغلاق التصنيف"
+                disabled={saving}
+                onClick={() => setSelectedId('')}
+              >
+                <X size={18} />
+              </button>
             </div>
-
-            <label>
-              السنة الدراسية
-              <select
-                value={yearId}
-                onChange={(event) => resetPathAfterYear(event.target.value)}
-                required
-              >
-                <option value="">اختر السنة</option>
-                {years.map((year) => (
-                  <option key={year.id} value={year.id}>
-                    {year.nameAr}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              الفصل الدراسي
-              <select
-                value={semesterId}
-                onChange={(event) => {
-                  setSemesterId(event.target.value);
-                  setCourseChoice('');
-                  setSectionChoice('');
-                }}
-                required
-                disabled={!yearId}
-              >
-                <option value="">اختر الفصل</option>
-                {visibleSemesters.map((semester) => (
-                  <option key={semester.id} value={semester.id}>
-                    {semester.nameAr}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              المادة
-              <select
-                value={courseChoice}
-                onChange={(event) => {
-                  setCourseChoice(event.target.value);
-                  setSectionChoice('');
-                }}
-                required
-                disabled={!semesterId}
-              >
-                <option value="">اختر المادة</option>
-                {visibleCourses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.nameAr}
-                  </option>
-                ))}
-                <option value="__new__">+ إنشاء مادة جديدة</option>
-              </select>
-            </label>
-
-            {isNewCourse ? (
-              <fieldset className="inline-fields">
-                <legend>المادة الجديدة</legend>
-                <label>
-                  الاسم بالعربية
-                  <input name="courseNameAr" required />
-                </label>
-                <label>
-                  الاسم بالإنجليزية
-                  <input name="courseNameEn" dir="ltr" />
-                </label>
-                <label>
-                  ترتيب العرض
-                  <input name="courseDisplayOrder" type="number" min="0" required />
-                </label>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={newCourseHasSections}
-                    onChange={(event) => {
-                      setNewCourseHasSections(event.target.checked);
-                      setSectionChoice('');
-                    }}
-                  />
-                  المادة تحتوي أقسامًا
-                </label>
-              </fieldset>
-            ) : null}
-
-            {courseChoice && hasSections ? (
+            <fieldset className="inbox-classification-fields" disabled={saving}>
+              {canCreate && canUpdate && (
+                <div className="classification-mode" role="group" aria-label="طريقة ربط الملف">
+                  <button
+                    type="button"
+                    aria-pressed={mode === 'create'}
+                    onClick={() => setMode('create')}
+                  >
+                    <FilePlus2 size={16} />
+                    ملف جديد
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={mode === 'attach'}
+                    onClick={() => setMode('attach')}
+                  >
+                    <Paperclip size={16} />
+                    محتوى موجود
+                  </button>
+                </div>
+              )}
               <label>
-                القسم
+                السنة الدراسية
                 <select
-                  value={sectionChoice}
-                  onChange={(event) => setSectionChoice(event.target.value)}
+                aria-label="السنة الدراسية"
+                  value={yearId}
+                  onChange={(event) => resetPathAfterYear(event.target.value)}
                   required
                 >
-                  <option value="">اختر القسم</option>
-                  {visibleSections.map((section) => (
-                    <option key={section.id} value={section.id}>
-                      {section.nameAr}
+                  <option value="">اختر السنة</option>
+                  {years.map((year) => (
+                    <option key={year.id} value={year.id}>
+                      {year.nameAr}
                     </option>
                   ))}
-                  <option value="__new__">+ إنشاء قسم جديد</option>
                 </select>
               </label>
-            ) : null}
+              <label>
+                الفصل الدراسي
+                <select
+                aria-label="الفصل الدراسي"
+                  value={semesterId}
+                  onChange={(event) => {
+                    setSemesterId(event.target.value);
+                    setCourseChoice('');
+                    setSectionChoice('');
+                    resetCategory();
+                  }}
+                  required
+                  disabled={!yearId}
+                >
+                  <option value="">اختر الفصل</option>
+                  {visibleSemesters.map((semester) => (
+                    <option key={semester.id} value={semester.id}>
+                      {semester.nameAr}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                المادة
+                <select
+                aria-label="المادة"
+                  value={courseChoice}
+                  onChange={(event) => {
+                    setCourseChoice(event.target.value);
+                    setSectionChoice('');
+                    resetCategory();
+                  }}
+                  required
+                  disabled={!semesterId}
+                >
+                  <option value="">اختر المادة</option>
+                  {visibleCourses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.nameAr}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            {hasSections && sectionChoice === '__new__' ? (
-              <fieldset className="inline-fields">
-                <legend>القسم الجديد</legend>
+              {courseChoice && hasSections ? (
                 <label>
-                  الاسم بالعربية
-                  <input name="sectionNameAr" required />
+                  القسم
+                  <select
+                  aria-label="القسم"
+                    value={sectionChoice}
+                    onChange={(event) => {
+                      setSectionChoice(event.target.value);
+                      resetCategory();
+                    }}
+                    required
+                  >
+                    <option value="">اختر القسم</option>
+                    {visibleSections.map((section) => (
+                      <option key={section.id} value={section.id}>
+                        {section.nameAr}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-                <label>
-                  الاسم بالإنجليزية
-                  <input name="sectionNameEn" dir="ltr" />
-                </label>
-                <label>
-                  ترتيب العرض
-                  <input name="sectionDisplayOrder" type="number" min="0" required />
-                </label>
-              </fieldset>
-            ) : null}
+              ) : null}
 
-            <label>
-              العنوان
-              <input name="titleAr" defaultValue={selected.fileName} required />
-            </label>
-            <label>
-              العنوان بالإنجليزية
-              <input name="titleEn" dir="ltr" />
-            </label>
-            <label>
-              الوصف
-              <textarea name="descriptionAr" rows={4} />
-            </label>
-            <label>
-              ترتيب العرض
-              <input name="displayOrder" type="number" min="0" required />
-            </label>
-
-            <div className="form-actions">
-              <button
-                type="submit"
-                value="draft"
-                disabled={saving || !courseChoice || (hasSections && !sectionChoice)}
-              >
-                حفظ كمسودة
-              </button>
-              <button
-                className="primary"
-                type="submit"
-                value="publish"
-                disabled={saving || !courseChoice || (hasSections && !sectionChoice)}
-              >
-                <Check size={17} /> نشر مباشرة
-              </button>
-            </div>
+              <label>
+                نوع المحتوى
+                <select
+                aria-label="نوع المحتوى"
+                  value={categoryId}
+                  required
+                  disabled={!courseChoice || (hasSections && !sectionChoice)}
+                  onChange={(event) => {
+                    setCategoryId(event.target.value);
+                    setContentId('');
+                  }}
+                >
+                  <option value="">اختر نوع المحتوى</option>
+                  {visibleCategories.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nameAr}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {courseChoice && (!hasSections || sectionChoice) && !visibleCategories.length && (
+                <p className="form-message">لا توجد أنواع محتوى متاحة في هذا المسار.</p>
+              )}
+              {mode === 'attach' ? (
+                <>
+                  <label>
+                    المحتوى
+                    <select
+                    aria-label="المحتوى"
+                      value={contentId}
+                      required
+                      disabled={!categoryId}
+                      onChange={(event) => setContentId(event.target.value)}
+                    >
+                      <option value="">اختر المحتوى</option>
+                      {visibleTargets.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.titleAr}
+                          {item.state === 'DRAFT' ? ' (مسودة)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {categoryId && !visibleTargets.length && (
+                    <p className="form-message">لا يوجد محتوى ملفات متاح في هذا النوع.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <label>
+                    العنوان
+                    <input
+                      name="titleAr"
+                      defaultValue={selected.fileName}
+                      maxLength={200}
+                      required
+                    />
+                  </label>
+                  <label>
+                    العنوان بالإنجليزية
+                    <input name="titleEn" dir="ltr" />
+                  </label>
+                  <label>
+                    الوصف
+                    <textarea name="descriptionAr" rows={4} />
+                  </label>
+                  <label>
+                    ترتيب العرض
+                    <input name="displayOrder" type="number" min="0" max="10000" required />
+                  </label>
+                </>
+              )}
+              <div className="form-actions">
+                {mode === 'attach' ? (
+                  <button
+                    className="primary"
+                    type="submit"
+                    disabled={!validCategory || !validTarget}
+                  >
+                    <Paperclip size={17} />
+                    إرفاق الملف
+                  </button>
+                ) : (
+                  <>
+                    <button type="submit" value="draft" disabled={!validCategory}>
+                      حفظ كمسودة
+                    </button>
+                    {canPublish && (
+                      <button
+                        className="primary"
+                        type="submit"
+                        value="publish"
+                        disabled={!validCategory}
+                      >
+                        <Check size={17} /> نشر مباشرة
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </fieldset>
           </form>
         ) : null}
       </section>

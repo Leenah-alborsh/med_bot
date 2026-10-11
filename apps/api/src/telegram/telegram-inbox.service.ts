@@ -127,12 +127,18 @@ export class TelegramInboxService {
           storageChatId: media.storageChatId,
           storageMessageId: media.storageMessageId,
         },
-        select: { id: true, contentItemId: true, uploadedById: true },
+        select: {
+          id: true,
+          contentItemId: true,
+          uploadedById: true,
+          sourceInboxFile: { select: { contentItemId: true } },
+        },
       });
+      // Additional inbox files link through the attachment, not the unique source-content relation.
       const directClassification = directAttachment
         ? {
             status: 'CLASSIFIED' as const,
-            contentItemId: directAttachment.contentItemId,
+            contentItemId: directAttachment.sourceInboxFile?.contentItemId ?? undefined,
             attachmentId: directAttachment.id,
             classifiedById: directAttachment.uploadedById,
             classifiedAt: new Date(),
@@ -271,6 +277,12 @@ export class TelegramInboxService {
     actor: AuthenticatedAdmin,
     metadata: RequestMetadata,
   ) {
+    if ('contentItemId' in input) {
+      return this.attachToExisting(id, input.contentItemId, actor, metadata);
+    }
+    if (!actor.permissions.includes('content.create')) {
+      throw new ForbiddenException('لا تملك صلاحية إضافة المحتوى.');
+    }
     if (input.publish && !actor.permissions.includes('content.publish')) {
       throw new ForbiddenException('لا تملك صلاحية نشر المحتوى مباشرة.');
     }
@@ -284,32 +296,18 @@ export class TelegramInboxService {
     });
     if (!bot) throw new NotFoundException('البوت الرئيسي غير مهيأ.');
 
-    let existingCourse: {
-      id: string;
-      hasSections: boolean;
-      semester: { academicYearId: string };
-    } | null = null;
-    if (input.courseId) {
-      existingCourse = await this.prisma.course.findFirst({
-        where: { id: input.courseId, isActive: true, archivedAt: null },
-        select: { id: true, hasSections: true, semester: { select: { academicYearId: true } } },
-      });
-      if (!existingCourse) throw new NotFoundException('المادة غير موجودة.');
-      await this.scopes.assertResourceAccess(actor, {
-        botId: bot.id,
-        academicYearId: existingCourse.semester.academicYearId,
-        courseId: existingCourse.id,
-      });
-    } else if (input.newCourse) {
-      const semester = await this.prisma.semester.findFirst({
-        where: { id: input.newCourse.semesterId, isActive: true, archivedAt: null },
-        select: { academicYearId: true },
-      });
-      if (!semester) throw new NotFoundException('الفصل الدراسي غير موجود.');
-      await this.scopes.assertResourceAccess(actor, {
-        botId: bot.id,
-        academicYearId: semester.academicYearId,
-      });
+    const course = await this.prisma.course.findFirst({
+      where: { id: input.courseId, isActive: true, archivedAt: null },
+      select: { id: true, hasSections: true, semester: { select: { academicYearId: true } } },
+    });
+    if (!course) throw new NotFoundException('المادة غير موجودة.');
+    await this.scopes.assertResourceAccess(actor, {
+      botId: bot.id,
+      academicYearId: course.semester.academicYearId,
+      courseId: course.id,
+    });
+    if (course.hasSections && !input.sectionId) {
+      throw new BadRequestException('اختر القسم الموجود لهذه المادة.');
     }
 
     try {
@@ -320,87 +318,19 @@ export class TelegramInboxService {
         });
         if (claimed.count !== 1) throw new ConflictException('تم تصنيف هذا الملف مسبقًا.');
 
-        const course =
-          existingCourse ??
-          (await tx.course.create({
-            data: {
-              semesterId: input.newCourse!.semesterId,
-              nameAr: input.newCourse!.nameAr,
-              nameEn: input.newCourse!.nameEn || input.newCourse!.nameAr,
-              displayOrder: input.newCourse!.displayOrder,
-              hasSections: input.newCourse!.hasSections,
-            },
-            select: { id: true, hasSections: true },
-          }));
-
-        let sectionId = input.sectionId;
-        if (sectionId) {
-          const section = await tx.section.findFirst({
-            where: { id: sectionId, courseId: course.id, isActive: true, archivedAt: null },
-            select: { id: true },
-          });
-          if (!section) throw new BadRequestException('القسم لا يتبع المادة المحددة.');
-        } else if (input.newSection) {
-          if (!course.hasSections)
-            throw new BadRequestException('هذه المادة مضبوطة للعمل بدون أقسام.');
-          sectionId = (
-            await tx.section.create({
-              data: {
-                courseId: course.id,
-                nameAr: input.newSection.nameAr,
-                nameEn: input.newSection.nameEn || input.newSection.nameAr,
-                displayOrder: input.newSection.displayOrder,
-              },
-              select: { id: true },
-            })
-          ).id;
-        } else if (!course.hasSections) {
-          const existing = await tx.section.findFirst({
-            where: { courseId: course.id },
-            orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
-            select: { id: true },
-          });
-          sectionId =
-            existing?.id ??
-            (
-              await tx.section.create({
-                data: {
-                  courseId: course.id,
-                  nameAr: input.newCourse?.nameAr ?? 'ملفات المادة',
-                  nameEn: '__course__',
-                  displayOrder: 0,
-                },
-                select: { id: true },
-              })
-            ).id;
-        } else {
-          throw new BadRequestException('القسم مطلوب لهذه المادة.');
-        }
-
-        let category = await tx.contentCategory.findFirst({
-          where: { sectionId, nameEn: '__inbox_files__' },
-          select: { id: true, isActive: true },
+        const category = await tx.contentCategory.findFirst({
+          where: {
+            id: input.contentCategoryId,
+            isActive: true,
+            archivedAt: null,
+            ...(input.sectionId ? { sectionId: input.sectionId } : {}),
+            section: { courseId: course.id, isActive: true, archivedAt: null },
+          },
+          select: { id: true, sectionId: true },
         });
-        if (!category) {
-          const maximum = await tx.contentCategory.aggregate({
-            where: { sectionId },
-            _max: { displayOrder: true },
-          });
-          category = await tx.contentCategory.create({
-            data: {
-              sectionId,
-              nameAr: 'ملفات',
-              nameEn: '__inbox_files__',
-              displayOrder: (maximum._max.displayOrder ?? -1) + 1,
-            },
-            select: { id: true, isActive: true },
-          });
-        } else if (!category.isActive) {
-          await tx.contentCategory.update({
-            where: { id: category.id },
-            data: { isActive: true, archivedAt: null },
-          });
-        }
+        if (!category)
+          throw new BadRequestException('نوع المحتوى غير متاح أو لا يتبع المادة والقسم المحددين.');
+        const sectionId = category.sectionId;
 
         const publishedAt = input.publish ? new Date() : null;
         const content = await tx.contentItem.create({
@@ -459,6 +389,111 @@ export class TelegramInboxService {
       }
       throw error;
     }
+  }
+
+  private async attachToExisting(
+    id: string,
+    contentItemId: string,
+    actor: AuthenticatedAdmin,
+    metadata: RequestMetadata,
+  ) {
+    if (!actor.permissions.includes('content.update')) {
+      throw new ForbiddenException('لا تملك صلاحية إرفاق ملفات بالمحتوى الموجود.');
+    }
+    const bot = await this.prisma.bot.findUnique({
+      where: { key: 'medical-main' },
+      select: { id: true },
+    });
+    if (!bot) throw new NotFoundException('البوت الرئيسي غير مهيأ.');
+    return this.prisma.$transaction(async (tx) => {
+      const inbox = await tx.telegramChannelFile.findUnique({ where: { id } });
+      if (!inbox) throw new NotFoundException('الملف الوارد غير موجود.');
+      if (inbox.status !== 'UNCLASSIFIED')
+        throw new ConflictException('تم تصنيف هذا الملف مسبقًا.');
+      const content = await tx.contentItem.findFirst({
+        where: {
+          id: contentItemId,
+          contentType: 'FILE',
+          isActive: true,
+          archivedAt: null,
+          state: { not: 'ARCHIVED' },
+          contentCategory: { isActive: true, archivedAt: null },
+          section: {
+            isActive: true,
+            archivedAt: null,
+            course: { isActive: true, archivedAt: null },
+          },
+        },
+        select: {
+          id: true,
+          state: true,
+          section: {
+            select: {
+              courseId: true,
+              course: { select: { semester: { select: { academicYearId: true } } } },
+            },
+          },
+        },
+      });
+      if (!content) throw new BadRequestException('اختر محتوى ملفات موجودًا وغير مؤرشف.');
+      await this.scopes.assertResourceAccess(actor, {
+        botId: bot.id,
+        academicYearId: content.section.course.semester.academicYearId,
+        courseId: content.section.courseId,
+      });
+      const claimed = await tx.telegramChannelFile.updateMany({
+        where: { id, status: 'UNCLASSIFIED', attachmentId: null },
+        data: { status: 'CLASSIFIED', classifiedById: actor.id, classifiedAt: new Date() },
+      });
+      if (claimed.count !== 1) throw new ConflictException('تم تصنيف هذا الملف مسبقًا.');
+      // Serialize attachment checks for the same target using its row lock.
+      await tx.contentItem.update({
+        where: { id: contentItemId },
+        data: { updatedById: actor.id },
+      });
+      const duplicate = await tx.contentAttachment.findFirst({
+        where: {
+          contentItemId,
+          telegramFileUniqueId: inbox.telegramFileUniqueId,
+          isCurrent: true,
+          archivedAt: null,
+        },
+        select: { id: true },
+      });
+      if (duplicate) throw new ConflictException('هذا الملف مرفق بالمحتوى المحدد مسبقًا.');
+      const latest = await tx.contentAttachment.findFirst({
+        where: { contentItemId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      const attachment = await tx.contentAttachment.create({
+        data: {
+          contentItemId,
+          storageProvider: 'TELEGRAM',
+          originalFilename: inbox.fileName,
+          telegramFileId: inbox.telegramFileId,
+          telegramFileUniqueId: inbox.telegramFileUniqueId,
+          storageChatId: inbox.storageChatId,
+          storageMessageId: inbox.storageMessageId,
+          mimeType: inbox.mimeType,
+          fileSize: inbox.fileSize,
+          version: (latest?.version ?? 0) + 1,
+          uploadedById: actor.id,
+        },
+      });
+      // The attachment relation supports several incoming files for one content item.
+      await tx.telegramChannelFile.update({ where: { id }, data: { attachmentId: attachment.id } });
+      await this.audit.record({
+        actorId: actor.id,
+        actionKey: 'telegram-inbox.attach',
+        entityType: 'TelegramChannelFile',
+        entityId: id,
+        after: { contentItemId, attachmentId: attachment.id },
+        metadata,
+        client: tx,
+      });
+      return { contentItemId, state: content.state };
+    });
   }
 
   private serialize<T>(value: T): T {

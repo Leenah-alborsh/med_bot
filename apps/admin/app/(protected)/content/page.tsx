@@ -4,6 +4,7 @@ import {
   type ContentFilters,
 } from '../../../src/components/content-manager';
 import { serverApi } from '../../../src/lib/server-api';
+import { getUploadConfig } from '../../../src/lib/server-upload-config';
 import { redirect } from 'next/navigation';
 type Option = {
   id: string;
@@ -59,14 +60,16 @@ export default async function Page({
       query.set(key, value.trim());
     }
   }
-  const [content, categories, sections, courses, semesters, years] = await Promise.all([
-    serverApi<PageResult<UnifiedContentItem>>(`unified-content?${query}`),
-    catalogOptions('content-types'),
-    catalogOptions('sections'),
-    catalogOptions('courses'),
-    catalogOptions('semesters'),
-    catalogOptions('years'),
-  ]);
+  const [content, categories, sections, courses, semesters, years, uploadConfig] =
+    await Promise.all([
+      serverApi<PageResult<UnifiedContentItem>>(`unified-content?${query}`),
+      catalogOptions('content-types'),
+      catalogOptions('sections'),
+      catalogOptions('courses'),
+      catalogOptions('semesters'),
+      catalogOptions('years'),
+      getUploadConfig(),
+    ]);
   const lastPage = Math.max(1, Math.ceil(content.total / content.pageSize));
   if (page > lastPage) {
     query.set('page', String(lastPage));
@@ -80,6 +83,7 @@ export default async function Page({
       pageSize={content.pageSize}
       filters={filters}
       inboxAvailable={content.inboxAvailable ?? true}
+      maxUploadBytes={uploadConfig.maxUploadBytes}
       categories={categories.items}
       sections={sections.items}
       courses={courses.items}

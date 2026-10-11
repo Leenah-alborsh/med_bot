@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { basename, extname, resolve } from 'node:path';
 import { BadRequestException } from '@nestjs/common';
-import { MAX_UPLOAD_BYTES } from '../config/environment.js';
+import { resolveUploadEnvironment } from '../config/environment.js';
 import { diskStorage } from 'multer';
 
 const allowed = new Map([
@@ -78,7 +78,13 @@ export const uploadOptions = {
       callback(null, randomUUID() + extname(originalFilename).toLowerCase());
     },
   }),
-  limits: { fileSize: Number(process.env.MAX_UPLOAD_BYTES ?? MAX_UPLOAD_BYTES), files: 1 },
+  limits: {
+    // Read after ConfigModule loads .env, rather than at module import time.
+    get fileSize() {
+      return resolveUploadEnvironment(process.env).MAX_UPLOAD_BYTES;
+    },
+    files: 1,
+  },
   fileFilter: (
     _request: Express.Request,
     file: Express.Multer.File,

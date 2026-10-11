@@ -1,5 +1,5 @@
 'use client';
-import { ImagePlus, Megaphone, Save, Send } from 'lucide-react';
+import { Camera, ImagePlus, Megaphone, Save, Send } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { clientApi } from '../lib/client-api';
@@ -25,10 +25,35 @@ const statusLabel: Record<string, string> = {
   COMPLETED: 'مكتمل',
   FAILED: 'فشل',
 };
-export function BotManagement({ initial }: { initial: Data }) {
+export function BotManagement({
+  initial,
+  canManageBot,
+  canSendAnnouncements,
+}: {
+  initial: Data;
+  canManageBot: boolean;
+  canSendAnnouncements: boolean;
+}) {
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  async function updateProfilePhoto(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    const form = event.currentTarget;
+    try {
+      await clientApi('announcements/profile-photo', {
+        method: 'POST',
+        body: new FormData(form),
+      });
+      setMessage('تم تغيير صورة البوت على Telegram بنجاح.');
+      form.reset();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذر تغيير صورة البوت.');
+    } finally {
+      setBusy(false);
+    }
+  }
   async function saveWelcome(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -76,7 +101,9 @@ export function BotManagement({ initial }: { initial: Data }) {
         <div>
           <p className="eyebrow">إدارة التواصل</p>
           <h1>البوت والإعلانات</h1>
-          <p className="muted">تحكم برسالة البدء وأرسل إعلانات عامة أو مخصصة حسب السنة.</p>
+          <p className="muted">
+            تحكم بصورة البوت ورسالة البدء، وأرسل إعلانات عامة أو مخصصة حسب السنة.
+          </p>
         </div>
       </header>
       {message && (
@@ -85,66 +112,87 @@ export function BotManagement({ initial }: { initial: Data }) {
         </p>
       )}
       <section className="workspace-grid">
-        <form className="editor-panel form" onSubmit={saveWelcome}>
-          <div className="section-title">
-            <ImagePlus size={18} />
-            <h2>رسالة البدء</h2>
-          </div>
-          <label>
-            نص الترحيب
-            <textarea
-              name="message"
-              rows={6}
-              defaultValue={initial.welcomeMessage}
-              maxLength={1024}
-              required
-            />
-          </label>
-          <label>
-            صورة الترحيب (اختياري)
-            <input name="photo" type="file" accept="image/jpeg,image/png,image/webp" />
-          </label>
-          {initial.hasWelcomePhoto && (
-            <label className="checkbox-line">
-              <input name="removePhoto" type="checkbox" value="true" /> إزالة الصورة الحالية
-            </label>
-          )}
-          <button className="primary" disabled={busy}>
-            <Save size={17} />
-            حفظ إعدادات البدء
-          </button>
-        </form>
-        <form className="editor-panel form" onSubmit={send}>
-          <div className="section-title">
-            <Megaphone size={18} />
-            <h2>إعلان جديد</h2>
-          </div>
-          <label>
-            نص الإعلان
-            <textarea name="message" rows={7} maxLength={1024} required />
-          </label>
-          <fieldset>
-            <legend>الطلاب المستهدفون</legend>
-            <p className="muted">عدم تحديد سنة يعني الإرسال لجميع مستخدمي البوت.</p>
-            <div className="permission-grid">
-              {initial.years.map((year) => (
-                <label className="checkbox-line" key={year.id}>
-                  <input name="yearIds" type="checkbox" value={year.id} />
-                  {year.nameAr}
-                </label>
-              ))}
+        {canManageBot && (
+          <form className="editor-panel form" onSubmit={updateProfilePhoto}>
+            <div className="section-title">
+              <Camera size={18} />
+              <h2>صورة البوت</h2>
             </div>
-          </fieldset>
-          {initial.hasWelcomePhoto && (
-            <label className="checkbox-line">
-              <input name="useWelcomePhoto" type="checkbox" /> إرفاق صورة الترحيب
+            <label>
+              الصورة الجديدة
+              <input name="photo" type="file" accept=".jpg,.jpeg,image/jpeg" required />
             </label>
-          )}
-          <button className="primary" disabled={busy}>
-            <Send size={17} />
-            إرسال الإعلان
-          </button>
-        </form>
+            <p className="muted">اختر صورة JPG بحجم لا يتجاوز 10 ميجابايت.</p>
+            <button className="primary" type="submit" disabled={busy}>
+              <Camera size={17} />
+              تغيير صورة البوت
+            </button>
+          </form>
+        )}
+        {canSendAnnouncements && (
+          <form className="editor-panel form" onSubmit={saveWelcome}>
+            <div className="section-title">
+              <ImagePlus size={18} />
+              <h2>رسالة البدء</h2>
+            </div>
+            <label>
+              نص الترحيب
+              <textarea
+                name="message"
+                rows={6}
+                defaultValue={initial.welcomeMessage}
+                maxLength={1024}
+                required
+              />
+            </label>
+            <label>
+              صورة الترحيب (اختياري)
+              <input name="photo" type="file" accept="image/jpeg,image/png,image/webp" />
+            </label>
+            {initial.hasWelcomePhoto && (
+              <label className="checkbox-line">
+                <input name="removePhoto" type="checkbox" value="true" /> إزالة الصورة الحالية
+              </label>
+            )}
+            <button className="primary" disabled={busy}>
+              <Save size={17} />
+              حفظ إعدادات البدء
+            </button>
+          </form>
+        )}
+        {canSendAnnouncements && (
+          <form className="editor-panel form" onSubmit={send}>
+            <div className="section-title">
+              <Megaphone size={18} />
+              <h2>إعلان جديد</h2>
+            </div>
+            <label>
+              نص الإعلان
+              <textarea name="message" rows={7} maxLength={1024} required />
+            </label>
+            <fieldset>
+              <legend>الطلاب المستهدفون</legend>
+              <p className="muted">عدم تحديد سنة يعني الإرسال لجميع مستخدمي البوت.</p>
+              <div className="permission-grid">
+                {initial.years.map((year) => (
+                  <label className="checkbox-line" key={year.id}>
+                    <input name="yearIds" type="checkbox" value={year.id} />
+                    {year.nameAr}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            {initial.hasWelcomePhoto && (
+              <label className="checkbox-line">
+                <input name="useWelcomePhoto" type="checkbox" /> إرفاق صورة الترحيب
+              </label>
+            )}
+            <button className="primary" disabled={busy}>
+              <Send size={17} />
+              إرسال الإعلان
+            </button>
+          </form>
+        )}
       </section>
       <section className="table-wrap">
         <table>

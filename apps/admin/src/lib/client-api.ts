@@ -40,7 +40,13 @@ export function clientUpload<T>(
       if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
     });
     request.addEventListener('load', () => {
-      const body = JSON.parse(request.responseText || '{}') as T & { error?: { message?: string } };
+      let body: T & { error?: { message?: string } };
+      try {
+        body = JSON.parse(request.responseText || '{}') as typeof body;
+      } catch {
+        reject(new Error(`تعذر رفع الملف (HTTP ${request.status}).`));
+        return;
+      }
       if (request.status >= 200 && request.status < 300) resolve(body);
       else reject(new Error(body.error?.message ?? 'تعذر رفع الملف'));
     });

@@ -1,5 +1,6 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { resolveUploadEnvironment } from '../config/environment.js';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -14,8 +15,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       : exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
-    const message = fileTooLarge
-      ? 'هذا الملف كبير للرفع المباشر. ارفعه إلى قناة التخزين ثم صنّفه من صفحة الملفات الواردة.'
+    const uploadTooLarge = fileTooLarge || status === 413;
+    const message = uploadTooLarge
+      ? `حجم الملف يتجاوز الحد المسموح للرفع من الداشبورد (${resolveUploadEnvironment(process.env).MAX_UPLOAD_BYTES / 1_000_000} ميجابايت).`
       : exception instanceof HttpException
         ? exception.message
         : 'Internal server error';

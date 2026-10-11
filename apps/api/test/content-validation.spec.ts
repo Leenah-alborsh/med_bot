@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { attachmentInputSchema, contentInputSchema } from '../src/content/content.schemas.js';
 import { validateExternalUrl } from '../src/content/content.service.js';
@@ -14,6 +14,7 @@ import {
 import { join } from 'node:path';
 
 describe('content and attachment validation', () => {
+  afterEach(() => vi.unstubAllEnvs());
   it('rejects unsafe URL schemes and private network targets', () => {
     expect(() => validateExternalUrl('http://example.com/file.pdf')).toThrow(BadRequestException);
     expect(() => validateExternalUrl('https://127.0.0.1/private')).toThrow(BadRequestException);
@@ -54,7 +55,17 @@ describe('content and attachment validation', () => {
     expect(isPathInsideUploadRoot(join(uploadRoot, '..', 'outside.pdf'))).toBe(false);
   });
   it('limits dashboard uploads to the 50 MB Cloud Bot API maximum', () => {
+    vi.stubEnv('TELEGRAM_LOCAL_API_ENABLED', 'false');
+    vi.stubEnv('MAX_UPLOAD_BYTES', '50000000');
     expect(uploadOptions.limits.fileSize).toBe(MAX_UPLOAD_BYTES);
+  });
+  it('reads the local limit after environment loading and rejects oversized cloud limits', () => {
+    vi.stubEnv('TELEGRAM_LOCAL_API_ENABLED', 'true');
+    vi.stubEnv('TELEGRAM_API_ROOT', 'http://127.0.0.1:8081');
+    vi.stubEnv('MAX_UPLOAD_BYTES', '2000000000');
+    expect(uploadOptions.limits.fileSize).toBe(2_000_000_000);
+    vi.stubEnv('TELEGRAM_LOCAL_API_ENABLED', 'false');
+    expect(() => uploadOptions.limits.fileSize).toThrow();
   });
 
   it('keeps original upload names while removing unsafe path data', () => {

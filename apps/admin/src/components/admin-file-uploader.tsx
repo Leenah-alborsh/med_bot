@@ -3,7 +3,7 @@
 import { FileUp, Search, RotateCcw, UploadCloud } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
-import { DIRECT_UPLOAD_TOO_LARGE_MESSAGE, MAX_UPLOAD_BYTES } from '../lib/upload-limits';
+import { uploadTooLargeMessage } from '../lib/upload-limits';
 import {
   changeUploadFilter,
   emptyUploadFilters,
@@ -23,8 +23,13 @@ const filterLabels = {
   category: 'نوع المحتوى',
 };
 
-export function AdminFileUploader({ items }: { items: UploadTarget[] }) {
-  const maxUploadBytes = MAX_UPLOAD_BYTES;
+export function AdminFileUploader({
+  items,
+  maxUploadBytes,
+}: {
+  items: UploadTarget[];
+  maxUploadBytes: number;
+}) {
   const [message, setMessage] = useState('');
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [query, setQuery] = useState('');
@@ -44,7 +49,7 @@ export function AdminFileUploader({ items }: { items: UploadTarget[] }) {
 
     const oversized = files.find((file) => file.size > maxUploadBytes);
     if (oversized) {
-      setMessage(DIRECT_UPLOAD_TOO_LARGE_MESSAGE);
+      setMessage(uploadTooLargeMessage(maxUploadBytes));
       return;
     }
 

@@ -68,7 +68,9 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       href: '/telegram-inbox',
       label: 'الملفات الواردة',
       icon: Inbox,
-      show: hasPermission(admin, 'content.read') && hasPermission(admin, 'content.create'),
+      show:
+        hasPermission(admin, 'content.read') &&
+        (hasPermission(admin, 'content.create') || hasPermission(admin, 'content.update')),
     },
     {
       href: '/uploads',
@@ -86,7 +88,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       href: '/bot-management',
       label: 'البوت والإعلانات',
       icon: Megaphone,
-      show: hasPermission(admin, 'announcements.send'),
+      show: hasPermission(admin, 'bots.read'),
     },
     {
       href: '/reports',

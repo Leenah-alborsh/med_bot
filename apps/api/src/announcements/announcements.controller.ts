@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -38,11 +39,13 @@ export class AnnouncementsController {
   constructor(private readonly announcements: AnnouncementsService) {}
 
   @Get()
+  @RequirePermissions('bots.read')
   settings() {
     return this.announcements.settings();
   }
 
   @Post('welcome')
+  @RequirePermissions('bots.manage')
   @UseGuards(CsrfGuard)
   @UseInterceptors(
     FileInterceptor('photo', {
@@ -59,6 +62,27 @@ export class AnnouncementsController {
     @Req() request: Request,
   ) {
     return this.announcements.updateWelcome(input, photo, actor, metadata(request));
+  }
+
+  @Post('profile-photo')
+  @RequirePermissions('bots.manage')
+  @UseGuards(CsrfGuard)
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10_000_000, files: 1 },
+      fileFilter: (_request, file, callback) =>
+        file.mimetype === 'image/jpeg'
+          ? callback(null, true)
+          : callback(new BadRequestException('يجب أن تكون صورة البوت بصيغة JPG.'), false),
+    }),
+  )
+  updateProfilePhoto(
+    @UploadedFile() photo: Express.Multer.File | undefined,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Req() request: Request,
+  ) {
+    return this.announcements.updateProfilePhoto(photo, actor, metadata(request));
   }
 
   @Post()

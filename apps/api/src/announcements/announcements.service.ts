@@ -86,6 +86,34 @@ export class AnnouncementsService implements OnModuleInit {
     };
   }
 
+  async updateProfilePhoto(
+    photo: Express.Multer.File | undefined,
+    actor: AuthenticatedAdmin,
+    metadata: RequestMetadata,
+  ) {
+    if (
+      !photo ||
+      photo.mimetype !== 'image/jpeg' ||
+      photo.buffer.length < 3 ||
+      photo.buffer[0] !== 0xff ||
+      photo.buffer[1] !== 0xd8 ||
+      photo.buffer[2] !== 0xff
+    ) {
+      throw new BadRequestException('يجب اختيار صورة JPG صالحة.');
+    }
+    const bot = await this.mainBot();
+    await this.telegram.setProfilePhoto(photo);
+    await this.audit.record({
+      actorId: actor.id,
+      actionKey: 'bot.profile-photo.updated',
+      entityType: 'Bot',
+      entityId: bot.id,
+      after: { filename: photo.originalname, fileSize: photo.size, mimeType: photo.mimetype },
+      metadata,
+    });
+    return { updated: true };
+  }
+
   async create(input: AnnouncementInput, actor: AuthenticatedAdmin, metadata: RequestMetadata) {
     const bot = await this.mainBot();
     const uniqueYears = [...new Set(input.yearIds)];

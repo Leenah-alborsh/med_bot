@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "type-check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "admin:bootstrap": "dotenv -e ../../.env -e ../../.env.example -- tsx src/bootstrap-super-admin.ts"
+    "admin:bootstrap": "dotenv -e ../../.env -e ../../.env.example -- tsx src/bootstrap-super-admin.ts",
+    "telegram:migrate-local": "dotenv -e ../../.env -e ../../.env.example -- tsx src/migrate-telegram-local.ts",
+    "content:diagnose": "dotenv -e ../../.env -- tsx src/diagnose-content.ts"
   },
   "dependencies": {
     "@medical/bot-worker": "workspace:*",

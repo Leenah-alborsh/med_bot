@@ -20,12 +20,25 @@ function createService() {
   };
   const inbox = { ingest: vi.fn().mockResolvedValue({ accepted: false }) };
   const service = new TelegramWebhookService(config as never, prisma as never, inbox as never);
-  const bot = { handleUpdate: vi.fn() };
+  const bot = { api: { setMyProfilePhoto: vi.fn() }, handleUpdate: vi.fn() };
   Reflect.set(service, 'bot', bot);
   return { service, prisma, bot, inbox };
 }
 
 describe('TelegramWebhookService', () => {
+  it('uploads a new static profile photo to Telegram', async () => {
+    const { service, bot } = createService();
+    bot.api.setMyProfilePhoto.mockResolvedValue(true);
+
+    await service.setProfilePhoto({
+      buffer: Buffer.from([0xff, 0xd8, 0xff]),
+      originalname: 'bot.jpg',
+    } as Express.Multer.File);
+
+    expect(bot.api.setMyProfilePhoto).toHaveBeenCalledOnce();
+    expect(bot.api.setMyProfilePhoto.mock.calls[0]?.[0]).toMatchObject({ type: 'static' });
+  });
+
   it('compares the Telegram secret without accepting missing or mismatched values', () => {
     const { service } = createService();
     expect(service.isSecretValid()).toBe(false);

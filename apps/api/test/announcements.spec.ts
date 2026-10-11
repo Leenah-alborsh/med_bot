@@ -7,6 +7,31 @@ import type { AuditService } from '../src/audit/audit.service.js';
 const actor = { id: 'admin', permissions: ['announcements.send'], roleKeys: [] } as never;
 
 describe('announcements', () => {
+  it('updates the Telegram profile photo and records the admin action', async () => {
+    const photo = {
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0x00]),
+      mimetype: 'image/jpeg',
+      originalname: 'bot.jpg',
+      size: 4,
+    } as Express.Multer.File;
+    const setProfilePhoto = vi.fn().mockResolvedValue(undefined);
+    const record = vi.fn().mockResolvedValue({});
+    const prisma = {
+      bot: { findUnique: vi.fn().mockResolvedValue({ id: 'bot' }) },
+    } as unknown as PrismaService;
+    const service = new AnnouncementsService(
+      prisma,
+      { setProfilePhoto } as unknown as TelegramWebhookService,
+      { record } as unknown as AuditService,
+    );
+
+    await expect(service.updateProfilePhoto(photo, actor, {})).resolves.toEqual({ updated: true });
+    expect(setProfilePhoto).toHaveBeenCalledWith(photo);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ actionKey: 'bot.profile-photo.updated', entityId: 'bot' }),
+    );
+  });
+
   it('queues an announcement for unique selected years', async () => {
     const create = vi
       .fn()

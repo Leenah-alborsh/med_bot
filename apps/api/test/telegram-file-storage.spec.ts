@@ -2,12 +2,59 @@ import { describe, expect, it, vi } from 'vitest';
 import { UploadTicketGuard } from '../src/content/upload-ticket.guard.js';
 import { UploadTicketService } from '../src/content/upload-ticket.service.js';
 import { TelegramFileStorageService } from '../src/content/telegram-file-storage.service.js';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 
 const config = (values: Record<string, string | undefined>) => ({
   get: vi.fn((key: string) => values[key]),
 });
 
 describe('managed Telegram file storage', () => {
+  it('streams dashboard files to the configured local Bot API endpoint', async () => {
+    let path = '';
+    let payload = '';
+    const server = createServer((request, response) => {
+      path = request.url ?? '';
+      request.on('data', (chunk: Buffer) => {
+        payload += chunk.toString();
+      });
+      request.on('end', () => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          JSON.stringify({
+            ok: true,
+            result: {
+              message_id: 73,
+              chat: { id: -1001234567890 },
+              document: { file_id: 'local-file', file_unique_id: 'local-unique' },
+            },
+          }),
+        );
+      });
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const address = server.address() as { port: number };
+      const service = new TelegramFileStorageService(
+        config({
+          MEDICAL_BOT_TOKEN: '123:test',
+          TELEGRAM_FILE_CHANNEL_ID: '-1001234567890',
+          TELEGRAM_API_ROOT: `http://127.0.0.1:${address.port}`,
+        }) as never,
+      );
+      await expect(
+        service.store('package.json', 'lecture.pdf', 'application/pdf'),
+      ).resolves.toMatchObject({ telegramFileId: 'local-file' });
+      expect(path).toBe('/bot123:test/sendDocument');
+      expect(payload).toContain('lecture.pdf');
+      expect(payload).toContain('name="document"');
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('issues a short-lived signed ticket bound to the admin and content item', () => {
     const service = new UploadTicketService(
       config({ ADMIN_UPLOAD_TOKEN_SECRET: 's'.repeat(48) }) as never,

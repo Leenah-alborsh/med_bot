@@ -7,6 +7,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
 import type { Environment } from './config/environment.js';
+import type { Server } from 'node:http';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -42,6 +43,8 @@ async function bootstrap() {
   const port =
     config.get('PORT', { infer: true }) ?? config.get('API_PORT', { infer: true }) ?? 3001;
   await app.listen(port, '0.0.0.0');
+  const server = app.getHttpServer() as Server;
+  server.requestTimeout = config.get('TELEGRAM_UPLOAD_TIMEOUT_SECONDS', { infer: true }) * 1000;
   logger.log(`API listening on port ${port} with prefix /${apiPrefix}`);
 }
 

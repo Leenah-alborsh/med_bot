@@ -5,7 +5,11 @@ import { TelegramInboxService } from '../src/telegram/telegram-inbox.service.js'
 import { ContentService } from '../src/content/content.service.js';
 import { Prisma } from '@medical/database';
 
-const actor = { id: 'admin', roleKeys: ['content-admin'] } as never;
+const actor = {
+  id: 'admin',
+  roleKeys: ['content-admin'],
+  permissions: ['content.create'],
+} as never;
 const makeInbox = (id: string, overrides = {}) => ({
   id,
   fileName: `${id}.pdf`,
@@ -191,7 +195,9 @@ describe('Unified admin content', () => {
         ),
       },
       section: { findFirst: vi.fn().mockResolvedValue({ id: 'section' }) },
-      contentCategory: { findFirst: vi.fn().mockResolvedValue({ id: 'category', isActive: true }) },
+      contentCategory: {
+        findFirst: vi.fn().mockResolvedValue({ id: 'category', sectionId: 'section' }),
+      },
       contentItem: {
         create: vi.fn(() => {
           managedRows.push({ id: 'classified-content' });
@@ -233,6 +239,7 @@ describe('Unified admin content', () => {
       {
         courseId: 'course',
         sectionId: 'section',
+        contentCategoryId: 'category',
         titleAr: 'Classified file',
         displayOrder: 0,
         publish: false,

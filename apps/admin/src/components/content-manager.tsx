@@ -19,11 +19,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
-import {
-  DIRECT_UPLOAD_TOO_LARGE_MESSAGE,
-  MAX_UPLOAD_BYTES,
-  MAX_UPLOAD_MEGABYTES,
-} from '../lib/upload-limits';
+import { uploadTooLargeMessage } from '../lib/upload-limits';
+import { newDraftUrl } from '../lib/content-navigation';
 
 type Item = {
   source: 'managed_content';
@@ -114,6 +111,7 @@ export function ContentManager({
   pageSize,
   filters,
   inboxAvailable,
+  maxUploadBytes,
 }: {
   items: UnifiedContentItem[];
   total: number;
@@ -121,6 +119,7 @@ export function ContentManager({
   pageSize: number;
   filters: ContentFilters;
   inboxAvailable: boolean;
+  maxUploadBytes: number;
   categories: Option[];
   sections: Section[];
   courses: Option[];
@@ -197,9 +196,9 @@ export function ContentManager({
   const filteredItems = items.filter((item): item is Item => item.source === 'managed_content');
   const inboxItems = items.filter((item): item is InboxItem => item.source === 'telegram_inbox');
   async function uploadFiles(id: string, files: File[], progressKey: string) {
-    const oversized = files.find((file) => file.size > MAX_UPLOAD_BYTES);
+    const oversized = files.find((file) => file.size > maxUploadBytes);
     if (oversized) {
-      throw new Error(DIRECT_UPLOAD_TOO_LARGE_MESSAGE);
+      throw new Error(uploadTooLargeMessage(maxUploadBytes));
     }
     for (const [index, file] of files.entries()) {
       const payload = new FormData();
@@ -231,7 +230,7 @@ export function ContentManager({
     const files = data
       .getAll('files')
       .filter((value): value is File => value instanceof File && value.size > 0);
-    let createdItemId: string | null = null;
+    let createdItem: { id: string; sectionId: string; titleAr: string } | null = null;
     setCreating(true);
     try {
       const contentType = formContentType(data);
@@ -240,7 +239,7 @@ export function ContentManager({
         setMessage('النص مطلوب عند اختيار محتوى نصي.');
         return;
       }
-      const item = await clientApi<{ id: string }>('content', {
+      const item = await clientApi<{ id: string; sectionId: string; titleAr: string }>('content', {
         method: 'POST',
         body: JSON.stringify({
           sectionId: formText(data, 'sectionId'),
@@ -253,7 +252,7 @@ export function ContentManager({
           displayOrder: Number(formText(data, 'displayOrder') ?? 0),
         }),
       });
-      createdItemId = item.id;
+      createdItem = item;
       const externalUrl = data.get('externalUrl');
       const url = typeof externalUrl === 'string' ? externalUrl.trim() : '';
       if (url)
@@ -274,19 +273,24 @@ export function ContentManager({
       setCreateContentType('TEXT');
       setMessage(
         files.length > 1
-          ? `تم إنشاء المحتوى ورفع ${files.length} ملفات إلى Telegram.`
+          ? `تم حفظ المحتوى كمسودة ورفع ${files.length} ملفات إلى Telegram.`
           : files.length === 1
-            ? 'تم إنشاء المحتوى ورفع الملف إلى Telegram.'
+            ? 'تم حفظ المحتوى كمسودة ورفع الملف إلى Telegram.'
             : 'تم إنشاء المحتوى كمسودة.',
       );
+      router.push(newDraftUrl(item));
       router.refresh();
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'حدث خطأ غير متوقع.';
       setMessage(
-        createdItemId
+        createdItem
           ? `تم إنشاء المسودة، لكن تعذر إكمال رفع جميع الملفات: ${detail}`
           : `تعذر إنشاء المحتوى: ${detail}`,
       );
+      if (createdItem) {
+        router.push(newDraftUrl(createdItem));
+        router.refresh();
+      }
     } finally {
       setCreating(false);
       setUploadProgress((current) => {
@@ -430,6 +434,16 @@ export function ContentManager({
           <h1>المحتوى والملفات</h1>
           <p className="muted">أنشئ المحتوى، أرفق موارده، ثم انشره للطلاب.</p>
         </div>
+        {Object.values(filters).some(Boolean) && (
+          <Link
+            href="/content"
+            className="icon-button"
+            title="مسح الفلاتر"
+            aria-label="مسح الفلاتر"
+          >
+            <X size={18} />
+          </Link>
+        )}
       </header>
       {!inboxAvailable && (
         <p className="notice" role="status">
@@ -787,7 +801,9 @@ export function ContentManager({
                     <button type="submit" disabled={uploadProgress[item.id] !== undefined}>
                       {uploadProgress[item.id] === undefined
                         ? 'رفع'
-                        : `رفع ${uploadProgress[item.id]}%`}
+                        : uploadProgress[item.id] === 100
+                          ? 'جارٍ الحفظ في تليجرام'
+                          : `رفع ${uploadProgress[item.id]}%`}
                     </button>
                   </form>
                 )}
@@ -979,7 +995,7 @@ export function ContentManager({
               />
               <small className="muted">
                 يمكن اختيار ملف واحد أو عدة ملفات لنفس المحتوى. الحد الأعلى للرفع المباشر{' '}
-                {MAX_UPLOAD_MEGABYTES}MB لكل ملف.
+                {maxUploadBytes / 1_000_000}MB لكل ملف.
               </small>
             </label>
           )}
@@ -1000,7 +1016,9 @@ export function ContentManager({
             {creating
               ? uploadProgress.create === undefined
                 ? 'جارٍ إنشاء المحتوى...'
-                : `رفع الملفات ${uploadProgress.create}%`
+                : uploadProgress.create === 100
+                  ? 'جارٍ الحفظ في تليجرام'
+                  : `رفع الملفات ${uploadProgress.create}%`
               : 'حفظ كمسودة'}
           </button>
         </form>

@@ -8,6 +8,12 @@ const baseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   'http://localhost:3001/api';
 
+export class ServerApiError extends Error {
+  constructor(public readonly status: number) {
+    super('API request failed');
+  }
+}
+
 export async function serverApi<T>(path: string): Promise<T> {
   const cookieStore = await cookies();
   const response = await fetch(`${baseUrl}/v1/${path}`, {
@@ -15,7 +21,7 @@ export async function serverApi<T>(path: string): Promise<T> {
     cache: 'no-store',
   });
   if (response.status === 401) redirect('/login');
-  if (!response.ok) throw new Error('API request failed');
+  if (!response.ok) throw new ServerApiError(response.status);
   return response.json() as Promise<T>;
 }
 

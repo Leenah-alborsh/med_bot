@@ -1,8 +1,11 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { TelegramInboxService } from '../src/telegram/telegram-inbox.service.js';
+import { classifyTelegramInboxSchema } from '../src/telegram/telegram-inbox.schemas.js';
 
 const channelId = '-1001234567890';
+const partial = (value: Record<string, unknown>): unknown =>
+  expect.objectContaining(value) as unknown;
 const channelPost = (overrides: Record<string, unknown> = {}) => ({
   update_id: 10,
   channel_post: {
@@ -86,7 +89,6 @@ describe('Telegram Channel Inbox ingestion', () => {
     };
     expect(upsertInput.create).toMatchObject({
       status: 'CLASSIFIED',
-      contentItemId: 'content',
       attachmentId: 'attachment',
     });
   });
@@ -107,7 +109,7 @@ describe('Telegram Channel Inbox ingestion', () => {
     await service.ingest(channelPost({ caption: 'MED-ABCDEF1234' }), channelId);
 
     expect(tx.contentAttachment.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+      data: partial({
         contentItemId: 'content',
         storageProvider: 'TELEGRAM',
         storageMessageId: 77,
@@ -120,7 +122,7 @@ describe('Telegram Channel Inbox ingestion', () => {
         contentItemId: null,
         attachmentId: null,
       },
-      data: expect.objectContaining({
+      data: partial({
         status: 'CLASSIFIED',
         contentItemId: 'content',
       }),
@@ -202,6 +204,7 @@ describe('Telegram Channel Inbox ingestion', () => {
       id: 'attachment',
       contentItemId: 'original-content',
       uploadedById: 'admin',
+      sourceInboxFile: { contentItemId: 'original-content' },
     });
 
     await service.ingest(
@@ -247,6 +250,26 @@ describe('Telegram Channel Inbox ingestion', () => {
       },
     });
   });
+  it('keeps additional files linked through their attachment when channel messages are edited', async () => {
+    const { service, tx } = ingestionService({
+      id: 'inbox',
+      status: 'CLASSIFIED',
+      contentItemId: null,
+      attachmentId: 'attachment',
+    } as never);
+    tx.contentAttachment.findFirst.mockResolvedValue({
+      id: 'attachment',
+      contentItemId: 'existing-content',
+      uploadedById: 'admin',
+      sourceInboxFile: { contentItemId: null },
+    });
+    await service.ingest({ edited_channel_post: channelPost().channel_post }, channelId);
+    expect(tx.telegramChannelFile.upsert).toHaveBeenCalledWith(
+      partial({ update: partial({ contentItemId: undefined, attachmentId: 'attachment' }) }),
+    );
+    expect(tx.contentAttachment.update).toHaveBeenCalled();
+    expect(tx.contentAttachment.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('Telegram Channel Inbox classification', () => {
@@ -269,6 +292,7 @@ describe('Telegram Channel Inbox classification', () => {
   const input = {
     courseId: '11111111-1111-4111-8111-111111111111',
     sectionId: '22222222-2222-4222-8222-222222222222',
+    contentCategoryId: '33333333-3333-4333-8333-333333333333',
     titleAr: 'الخطة',
     descriptionAr: 'خطة المادة',
     displayOrder: 3,
@@ -282,7 +306,11 @@ describe('Telegram Channel Inbox classification', () => {
         update: vi.fn().mockResolvedValue({}),
       },
       section: { findFirst: vi.fn().mockResolvedValue({ id: input.sectionId }) },
-      contentCategory: { findFirst: vi.fn().mockResolvedValue({ id: 'category', isActive: true }) },
+      contentCategory: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ id: input.contentCategoryId, sectionId: input.sectionId }),
+      },
       contentItem: {
         create: vi.fn().mockResolvedValue({ id: 'content', state: 'PUBLISHED' }),
       },
@@ -334,6 +362,22 @@ describe('Telegram Channel Inbox classification', () => {
     };
     expect(contentCreate.data.state).toBe('PUBLISHED');
     expect(contentCreate.data.publishedAt).toBeInstanceOf(Date);
+    expect(tx.contentItem.create).toHaveBeenCalledWith({
+      data: partial({
+        contentCategoryId: input.contentCategoryId,
+        sectionId: input.sectionId,
+      }),
+    });
+    expect(tx.contentCategory.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: partial({
+          id: input.contentCategoryId,
+          sectionId: input.sectionId,
+          isActive: true,
+          archivedAt: null,
+        }),
+      }),
+    );
     const attachmentCreate = tx.contentAttachment.create.mock.calls[0]?.[0] as {
       data: { storageProvider: string; telegramFileId: string; fileSize: bigint };
     };
@@ -342,5 +386,201 @@ describe('Telegram Channel Inbox classification', () => {
       telegramFileId: 'file-id',
       fileSize: 1_900_000_000n,
     });
+  });
+  it('rejects a content type from another section instead of creating a new one', async () => {
+    const { service, tx } = classificationService();
+    tx.contentCategory.findFirst.mockResolvedValue(null);
+    await expect(service.classify('inbox', input, actor, {})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(tx.contentItem.create).not.toHaveBeenCalled();
+    expect(tx.contentAttachment.create).not.toHaveBeenCalled();
+  });
+  it('requires create and publish permissions independently', async () => {
+    const { service, prisma } = classificationService();
+    await expect(
+      service.classify('inbox', input, { permissions: ['content.read'] } as never, {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.classify('inbox', input, { permissions: ['content.create'] } as never, {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+  it('does not require a visible section for courses without sections', async () => {
+    const { service, prisma, tx } = classificationService();
+    prisma.course.findFirst.mockResolvedValue({
+      id: input.courseId,
+      hasSections: false,
+      semester: { academicYearId: 'year' },
+    });
+    await service.classify('inbox', { ...input, sectionId: undefined }, actor, {});
+    expect(tx.contentItem.create).toHaveBeenCalledWith({
+      data: partial({
+        sectionId: input.sectionId,
+        contentCategoryId: input.contentCategoryId,
+      }),
+    });
+  });
+});
+
+describe('manual inbox attachment to existing content', () => {
+  const actor = { id: 'admin', permissions: ['content.update'] } as never;
+  function setup(state = 'PUBLISHED') {
+    const tx = {
+      telegramChannelFile: {
+        findUnique: vi.fn().mockResolvedValue({
+          status: 'UNCLASSIFIED',
+          fileName: 'lecture.pdf',
+          fileSize: 1900000000n,
+          telegramFileUniqueId: 'unique',
+          telegramFileId: 'file',
+          storageChatId: BigInt(channelId),
+          storageMessageId: 77,
+          mimeType: 'application/pdf',
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      contentItem: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'content',
+          state,
+          section: { courseId: 'course', course: { semester: { academicYearId: 'year' } } },
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      contentAttachment: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: 'attachment' }),
+      },
+    };
+    const prisma = {
+      bot: { findUnique: vi.fn().mockResolvedValue({ id: 'bot' }) },
+      $transaction: vi.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
+    };
+    const scopes = { assertResourceAccess: vi.fn().mockResolvedValue(undefined) };
+    const audit = { record: vi.fn().mockResolvedValue({}) };
+    return {
+      service: new TelegramInboxService(prisma as never, scopes as never, audit as never),
+      tx,
+      prisma,
+      scopes,
+      audit,
+    };
+  }
+  it.each(['DRAFT', 'PUBLISHED'])(
+    'attaches without changing an existing %s item or creating hierarchy',
+    async (state) => {
+      const { service, tx, scopes } = setup(state);
+      await expect(
+        service.classify('inbox', { contentItemId: 'content' }, actor, {}),
+      ).resolves.toEqual({ contentItemId: 'content', state });
+      expect(scopes.assertResourceAccess).toHaveBeenCalledWith(actor, {
+        botId: 'bot',
+        academicYearId: 'year',
+        courseId: 'course',
+      });
+      expect(tx.contentItem.update).toHaveBeenCalledWith({
+        where: { id: 'content' },
+        data: { updatedById: 'admin' },
+      });
+      expect(tx.telegramChannelFile.update).toHaveBeenCalledWith({
+        where: { id: 'inbox' },
+        data: { attachmentId: 'attachment' },
+      });
+      expect(tx.contentAttachment.create).toHaveBeenCalledWith({
+        data: partial({
+          contentItemId: 'content',
+          fileSize: 1900000000n,
+          storageMessageId: 77,
+        }),
+      });
+    },
+  );
+  it('supports several incoming files through their attachment relations', async () => {
+    const { service, tx } = setup();
+    await service.classify('first', { contentItemId: 'content' }, actor, {});
+    await service.classify('second', { contentItemId: 'content' }, actor, {});
+    expect(tx.contentAttachment.create).toHaveBeenCalledTimes(2);
+    for (const [call] of tx.telegramChannelFile.update.mock.calls as Array<[{ data: object }]>)
+      expect(call.data).not.toHaveProperty('contentItemId');
+  });
+  it('blocks an attachment outside the admin scope', async () => {
+    const { service, tx, scopes } = setup();
+    scopes.assertResourceAccess.mockRejectedValue(new ForbiddenException());
+    await expect(
+      service.classify('inbox', { contentItemId: 'content' }, actor, {}),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(tx.telegramChannelFile.updateMany).not.toHaveBeenCalled();
+    expect(tx.contentAttachment.create).not.toHaveBeenCalled();
+  });
+  it('requires update permission even if the admin can create content', async () => {
+    const { service, prisma } = setup();
+    await expect(
+      service.classify(
+        'inbox',
+        { contentItemId: 'content' },
+        { permissions: ['content.create'] } as never,
+        {},
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+  it('rejects inactive, archived or non-file targets', async () => {
+    const { service, tx } = setup();
+    tx.contentItem.findFirst.mockResolvedValue(null);
+    await expect(
+      service.classify('inbox', { contentItemId: 'content' }, actor, {}),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.contentItem.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: partial({
+          contentType: 'FILE',
+          isActive: true,
+          archivedAt: null,
+          state: { not: 'ARCHIVED' },
+        }),
+      }),
+    );
+    expect(tx.contentAttachment.create).not.toHaveBeenCalled();
+  });
+  it('rejects duplicate attachments and competing classification attempts', async () => {
+    const { service, tx } = setup();
+    tx.contentAttachment.findFirst.mockResolvedValue({ id: 'duplicate' });
+    await expect(
+      service.classify('inbox', { contentItemId: 'content' }, actor, {}),
+    ).rejects.toBeInstanceOf(ConflictException);
+    tx.contentAttachment.findFirst.mockResolvedValue(null);
+    tx.telegramChannelFile.updateMany.mockResolvedValue({ count: 0 });
+    await expect(
+      service.classify('inbox', { contentItemId: 'content' }, actor, {}),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.contentAttachment.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('inbox classification schema', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const create = { courseId: id, contentCategoryId: id, titleAr: 'Lecture', displayOrder: 1 };
+  it('requires an existing category and rejects automatic hierarchy creation', () => {
+    expect(classifyTelegramInboxSchema.safeParse(create).success).toBe(true);
+    expect(
+      classifyTelegramInboxSchema.safeParse({ ...create, contentCategoryId: undefined }).success,
+    ).toBe(false);
+    expect(
+      classifyTelegramInboxSchema.safeParse({
+        ...create,
+        newSection: { nameAr: 'New', displayOrder: 0 },
+      }).success,
+    ).toBe(false);
+  });
+  it('does not let existing attachments change the target publication state or title', () => {
+    expect(classifyTelegramInboxSchema.safeParse({ contentItemId: id }).success).toBe(true);
+    expect(
+      classifyTelegramInboxSchema.safeParse({ contentItemId: id, publish: true }).success,
+    ).toBe(false);
+    expect(
+      classifyTelegramInboxSchema.safeParse({ contentItemId: id, titleAr: 'Changed' }).success,
+    ).toBe(false);
   });
 });

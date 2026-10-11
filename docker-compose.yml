@@ -1,4 +1,17 @@
 services:
+  telegram-bot-api:
+    profiles: ['telegram-local']
+    build:
+      context: ./docker/telegram-bot-api
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+    ports:
+      - '127.0.0.1:8081:8081'
+    volumes:
+      - telegram_bot_api_data:/var/lib/telegram-bot-api
+
   postgres:
     image: postgres:16-bookworm
     container_name: medical-telegram-postgres
@@ -19,4 +32,5 @@ services:
       start_period: 10s
 
 volumes:
+  telegram_bot_api_data:
   postgres_data:

@@ -31,9 +31,9 @@ export class TelegramInboxController {
     return this.inbox.list(query);
   }
 
-  @Post(':id/classify')
+  @Post([':id/classify', ':id/classify-existing'])
   @UseGuards(CsrfGuard)
-  @RequirePermissions('content.create')
+  @RequirePermissions('content.read')
   classify(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(classifyTelegramInboxSchema)) input: ClassifyTelegramInboxInput,

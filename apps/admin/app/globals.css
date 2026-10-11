@@ -1297,6 +1297,53 @@ code {
 }
 
 /* Educational workspace identity and navigation. */
+.inbox-classification-fields {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  border: 0;
+}
+.classification-mode {
+  display: flex;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f4f7f6;
+}
+.classification-mode button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+.classification-mode button[aria-pressed='true'] {
+  background: #fff;
+  color: var(--accent-strong);
+  box-shadow: 0 1px 4px rgb(25 39 42 / 8%);
+}
+.inbox-workspace tr[data-selected='true'] {
+  background: #e9f5ef;
+}
+.inbox-classifier {
+  max-height: calc(100dvh - 130px);
+  overflow-y: auto;
+  top: 94px;
+}
+@media (max-width: 980px) {
+  .inbox-classifier {
+    max-height: none;
+  }
+}
 .login-panel > .brand {
   margin-bottom: 28px;
 }

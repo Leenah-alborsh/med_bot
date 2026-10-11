@@ -1,19 +1,16 @@
-import { ReportsTable } from '../../../src/components/reports-table';
-import { serverApi } from '../../../src/lib/server-api';
-type Report = {
-  id: string;
-  status: string;
-  createdAt: string;
-  contentItem: { titleAr: string; section: { nameAr: string; course: { nameAr: string } } };
-  attachment?: { originalFilename: string };
-};
+import { ReportsTable, type Report } from '../../../src/components/reports-table';
+import { getCurrentAdmin, hasPermission, serverApi } from '../../../src/lib/server-api';
 const text = {
   eyebrow: 'جودة المحتوى',
   title: 'بلاغات الملفات',
   subtitle: 'راجع مشكلات الطلاب ووثّق قرار المعالجة.',
 };
 export default async function Page() {
-  const data = await serverApi<{ items: Report[] }>('broken-file-reports?pageSize=100');
+  const [data, admin] = await Promise.all([
+    serverApi<{ items: Report[] }>('broken-file-reports?pageSize=100'),
+    getCurrentAdmin(),
+  ]);
+  const canManage = hasPermission(admin, 'broken-file-reports.manage');
   return (
     <main className="page">
       <header className="page-heading">
@@ -23,7 +20,12 @@ export default async function Page() {
           <p className="muted">{text.subtitle}</p>
         </div>
       </header>
-      <ReportsTable reports={data.items} />
+      <ReportsTable
+        reports={data.items}
+        canManage={canManage}
+        canArchive={canManage && hasPermission(admin, 'content.publish')}
+        canReadContent={hasPermission(admin, 'content.read')}
+      />
     </main>
   );
 }

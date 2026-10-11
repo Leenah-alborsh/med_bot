@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentAdmin } from '../auth/current-admin.decorator.js';
 import type { AuthenticatedAdmin } from '../auth/auth.types.js';
@@ -37,6 +37,19 @@ export class ReportsController {
     @Req() request: Request,
   ) {
     return this.reports.update(id, input, actor, {
+      ipAddress: request.ip,
+      userAgent: request.get('user-agent'),
+    });
+  }
+  @Post('broken-file-reports/:id/archive-content')
+  @UseGuards(CsrfGuard)
+  @RequirePermissions('broken-file-reports.manage', 'content.publish')
+  archiveContent(
+    @Param('id') id: string,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Req() request: Request,
+  ) {
+    return this.reports.archiveContent(id, actor, {
       ipAddress: request.ip,
       userAgent: request.get('user-agent'),
     });

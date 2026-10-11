@@ -35,6 +35,7 @@ export class TelegramWebhookService implements OnModuleInit {
       throw new Error('Telegram webhook configuration is incomplete');
     this.bot = createMedicalBot({
       token,
+      apiRoot: this.config.get('TELEGRAM_API_ROOT', { infer: true }),
       prisma: this.prisma,
       uploadDirectory: this.config.get('UPLOAD_DIRECTORY', { infer: true }),
       allowLocalFiles: false,
@@ -66,6 +67,19 @@ export class TelegramWebhookService implements OnModuleInit {
     const photo = message.photo?.at(-1);
     if (!photo) throw new ServiceUnavailableException('Telegram did not return a photo reference');
     return photo.file_id;
+  }
+
+  async setProfilePhoto(file: Express.Multer.File) {
+    if (!this.bot) throw new ServiceUnavailableException('Telegram webhook is disabled');
+    try {
+      await this.bot.api.setMyProfilePhoto({
+        type: 'static',
+        photo: new InputFile(file.buffer, file.originalname),
+      });
+    } catch (error) {
+      this.logger.error('Telegram bot profile photo update failed', error);
+      throw new ServiceUnavailableException('تعذر تحديث صورة البوت في Telegram');
+    }
   }
 
   async sendAnnouncement(chatId: bigint, message: string, photoFileId?: string | null) {

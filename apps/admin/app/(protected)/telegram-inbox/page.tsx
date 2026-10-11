@@ -1,5 +1,6 @@
 import { TelegramInboxManager } from '../../../src/components/telegram-inbox-manager';
-import { serverApi } from '../../../src/lib/server-api';
+import { getCurrentAdmin, hasPermission, serverApi } from '../../../src/lib/server-api';
+import { allCatalogItems } from '../../../src/lib/catalog-items';
 
 type InboxFile = {
   id: string;
@@ -15,9 +16,17 @@ type Option = {
   academicYearId?: string;
   semesterId?: string;
   courseId?: string;
+  sectionId?: string;
   hasSections?: boolean;
 };
 type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number };
+type ContentTarget = {
+  id: string;
+  titleAr: string;
+  sectionId: string;
+  contentCategoryId: string;
+  state: string;
+};
 
 export default async function Page({
   searchParams,
@@ -27,14 +36,19 @@ export default async function Page({
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
   const search = params.search?.trim() ?? '';
+  const admin = await getCurrentAdmin();
+  const canCreate = hasPermission(admin, 'content.create');
+  const canUpdate = hasPermission(admin, 'content.update');
   const query = new URLSearchParams({ page: String(page), pageSize: '20' });
   if (search) query.set('search', search);
-  const [inbox, years, semesters, courses, sections] = await Promise.all([
+  const [inbox, years, semesters, courses, sections, categories, targets] = await Promise.all([
     serverApi<PageResult<InboxFile>>(`telegram-inbox?${query}`),
-    serverApi<PageResult<Option>>('catalog/years?pageSize=100&active=true'),
-    serverApi<PageResult<Option>>('catalog/semesters?pageSize=100&active=true'),
-    serverApi<PageResult<Option>>('catalog/courses?pageSize=100&active=true'),
-    serverApi<PageResult<Option>>('catalog/sections?pageSize=100&active=true'),
+    allCatalogItems<Option>('years', { active: 'true' }),
+    allCatalogItems<Option>('semesters', { active: 'true' }),
+    allCatalogItems<Option>('courses', { active: 'true' }),
+    allCatalogItems<Option>('sections', { active: 'true' }),
+    allCatalogItems<Option>('content-types', { active: 'true' }),
+    canUpdate ? serverApi<{ items: ContentTarget[] }>('content/upload-targets') : { items: [] },
   ]);
   return (
     <TelegramInboxManager
@@ -47,6 +61,11 @@ export default async function Page({
       semesters={semesters.items}
       courses={courses.items}
       sections={sections.items}
+      categories={categories.items}
+      targets={targets.items}
+      canCreate={canCreate}
+      canUpdate={canUpdate}
+      canPublish={hasPermission(admin, 'content.publish')}
     />
   );
 }
