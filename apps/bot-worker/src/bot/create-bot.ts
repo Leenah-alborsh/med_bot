@@ -469,10 +469,10 @@ ${prompt}`
     await ctx.reply([item.titleAr, description].filter(Boolean).join('\n\n'));
 
     let delivered = item.contentType === 'TEXT';
-    if (item.contentType === 'LINK') {
-      const links = item.attachments.filter(
-        (attachment) => attachment.storageProvider === 'EXTERNAL_URL' && attachment.externalUrl,
-      );
+    const links = item.attachments.filter(
+      (attachment) => attachment.storageProvider === 'EXTERNAL_URL' && attachment.externalUrl,
+    );
+    if (links.length || item.contentType === 'LINK') {
       if (!links.length) await ctx.reply('لا توجد روابط متاحة حالياً.');
       for (const [index, attachment] of links.entries()) {
         await ctx.reply(links.length > 1 ? `الرابط ${index + 1}` : 'فتح الرابط', {

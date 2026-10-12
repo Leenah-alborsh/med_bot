@@ -26,9 +26,18 @@
   box-sizing: border-box;
 }
 
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
 html,
 body {
   min-height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -765,8 +774,31 @@ code {
 
 .form label,
 .section-title,
-.page-heading {
+.page-heading,
+.content-row,
+.row-title,
+.inline-upload,
+.inline-upload label,
+.archive-item,
+.pagination {
   min-width: 0;
+}
+
+.form input,
+.form select,
+.form textarea,
+.inline-upload input,
+.inline-upload button,
+.content-row code {
+  max-width: 100%;
+}
+
+.row-title {
+  flex-wrap: wrap;
+}
+
+.inline-upload {
+  flex-wrap: wrap;
 }
 
 @media (max-width: 1180px) and (min-width: 981px) {

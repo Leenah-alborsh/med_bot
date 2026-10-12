@@ -23,7 +23,11 @@ function setup(level: string) {
     contentCategory: {
       findMany: vi.fn().mockResolvedValue([{ id: 'category', nameAr: 'Category' }]),
     },
-    contentItem: { findMany: vi.fn().mockResolvedValue([{ id: 'content', titleAr: 'Content' }]) },
+    contentItem: {
+      findMany: vi.fn().mockResolvedValue([{ id: 'content', titleAr: 'Content' }]),
+      findFirst: vi.fn(),
+    },
+    contentAccessEvent: { create: vi.fn() },
   };
   const bot = createMedicalBot({
     token: '123:test',
@@ -113,5 +117,45 @@ describe('lightweight bot menu queries', () => {
         update: { lastInteraction: expect.any(Date) as unknown },
       }),
     );
+  });
+
+  it('sends external links attached to file content', async () => {
+    const { bot, prisma, update, replies } = setup('CONTENT');
+    update.message.text = 'Content';
+    prisma.contentItem.findFirst.mockResolvedValue({
+      id: 'content',
+      titleAr: 'Lecture video',
+      descriptionAr: null,
+      bodyText: null,
+      contentType: 'FILE',
+      attachments: [
+        {
+          id: 'link',
+          storageProvider: 'EXTERNAL_URL',
+          externalUrl: 'https://youtu.be/example',
+          storageChatId: null,
+          storageMessageId: null,
+          telegramFileId: null,
+          storedPath: null,
+          originalFilename: 'external-link',
+        },
+      ],
+    });
+
+    await bot.handleUpdate(update);
+
+    expect(replies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          method: 'sendMessage',
+          payload: expect.objectContaining({
+            reply_markup: expect.objectContaining({
+              inline_keyboard: [[expect.objectContaining({ url: 'https://youtu.be/example' })]],
+            }),
+          }),
+        }),
+      ]),
+    );
+    expect(prisma.contentAccessEvent.create).toHaveBeenCalledOnce();
   });
 });
