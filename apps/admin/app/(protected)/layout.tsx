@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Tags,
   UploadCloud,
+  Users,
 } from 'lucide-react';
 import { getCurrentAdmin, hasPermission } from '../../src/lib/server-api';
 import { LogoutButton } from '../../src/components/logout-button';
@@ -22,6 +23,12 @@ import { DashboardShell } from '../../src/components/dashboard-shell';
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const admin = await getCurrentAdmin();
   const nav = [
+    {
+      href: '/bot-users',
+      label: 'مستخدمو البوت',
+      icon: Users,
+      show: admin.roleKeys.includes('super-admin'),
+    },
     {
       href: '/dashboard',
       label: 'الرئيسية',
@@ -110,7 +117,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
     },
   ];
   const groups = [
-    { label: 'نظرة عامة', paths: ['/dashboard', '/usage'] },
+    { label: 'نظرة عامة', paths: ['/dashboard', '/bot-users', '/usage'] },
     {
       label: 'المكتبة التعليمية',
       paths: [

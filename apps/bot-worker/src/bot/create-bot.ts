@@ -2,6 +2,7 @@ import { createReadStream, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { PrismaClient } from '@medical/database';
 import { Bot, InlineKeyboard, InputFile, type Context } from 'grammy';
+import { recordBotUsage } from './usage.js';
 import {
   BACK_TEXT,
   HOME_TEXT,
@@ -78,7 +79,7 @@ const promptFor = (level: NavigationLevel, hasOptions: boolean) => {
 export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = true }: Options) {
   const bot = new Bot(token, apiRoot ? { client: { apiRoot } } : undefined);
 
-  const identify = async (ctx: Context): Promise<Identity> => {
+  const identify = async (ctx: Context, action?: string): Promise<Identity> => {
     if (!ctx.from) throw new Error('Telegram user context is missing');
     const [student, configuredBot] = await Promise.all([
       prisma.student.upsert({
@@ -103,6 +104,13 @@ export function createMedicalBot({ token, prisma, apiRoot, allowLocalFiles = tru
       update: { lastInteraction: new Date() },
       create: { studentId: student.id, botId: configuredBot.id },
     });
+    const text = ctx.message?.text?.trim();
+    await recordBotUsage(
+      prisma,
+      membership.id,
+      ctx.update.update_id,
+      action ?? (text === HOME_TEXT ? 'HOME' : text === BACK_TEXT ? 'BACK' : 'INTERACTION'),
+    );
     return { student, membership };
   };
 
@@ -289,7 +297,7 @@ ${prompt}`
   };
 
   bot.command('start', async (ctx) => {
-    const { membership } = await identify(ctx);
+    const { membership } = await identify(ctx, 'START');
     const fresh = await reset(membership.id);
     const settings = await prisma.bot.findUnique({
       where: { key: 'medical-main' },
@@ -307,7 +315,7 @@ ${prompt}`
   });
 
   bot.command('menu', async (ctx) => {
-    const { membership } = await identify(ctx);
+    const { membership } = await identify(ctx, 'MENU');
     await goHome(ctx, membership.id);
   });
 
@@ -541,7 +549,7 @@ ${prompt}`
     const data = parseCallbackData(ctx.callbackQuery.data);
     if (!data) return ctx.answerCallbackQuery({ text: 'هذا الإجراء غير صالح أو قديم.' });
     await ctx.answerCallbackQuery();
-    const { student } = await identify(ctx);
+    const { student } = await identify(ctx, 'REPORT');
     const item = await prisma.contentItem.findFirst({
       where: {
         id: data.id,

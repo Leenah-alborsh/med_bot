@@ -13,6 +13,16 @@ function setup(level: string) {
     navigationContentCategoryId: 'category',
   };
   const prisma = {
+    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<void>) =>
+      callback({
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        botUsageEvent: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          findFirst: vi.fn().mockResolvedValue(null),
+          create: vi.fn().mockResolvedValue({}),
+        },
+      }),
+    ),
     student: { upsert: vi.fn().mockResolvedValue({ id: 'student' }) },
     bot: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: 'bot' }) },
     studentBotMembership: { upsert: vi.fn().mockResolvedValue(membership) },
@@ -151,8 +161,8 @@ describe('lightweight bot menu queries', () => {
           payload: expect.objectContaining({
             reply_markup: expect.objectContaining({
               inline_keyboard: [[expect.objectContaining({ url: 'https://youtu.be/example' })]],
-            }),
-          }),
+            }) as unknown,
+          }) as unknown,
         }),
       ]),
     );

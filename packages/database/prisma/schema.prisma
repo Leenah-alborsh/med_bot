@@ -139,6 +139,7 @@ model StudentBotMembership {
   student                     Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
   bot                         Bot                  @relation(fields: [botId], references: [id], onDelete: Cascade)
   accessEvents                ContentAccessEvent[]
+  usageEvents                 BotUsageEvent[]
 
   @@unique([studentId, botId])
   @@index([botId, isBlocked])
@@ -529,6 +530,20 @@ model ContentAccessEvent {
 
   @@index([studentId, createdAt])
   @@index([contentItemId, eventType, createdAt])
+}
+
+model BotUsageEvent {
+  id              String               @id @default(uuid()) @db.Uuid
+  botMembershipId String               @db.Uuid
+  updateId        BigInt
+  action          String
+  isSessionStart  Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+  botMembership   StudentBotMembership @relation(fields: [botMembershipId], references: [id], onDelete: Cascade)
+
+  @@unique([botMembershipId, updateId])
+  @@index([botMembershipId, createdAt])
+  @@index([createdAt, isSessionStart])
 }
 
 model TelegramWebhookUpdate {
