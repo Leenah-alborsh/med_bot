@@ -1,6 +1,6 @@
 export const usageLabels: Record<string, string> = {
-  START: 'بدء البوت /start',
-  MENU: 'القائمة /menu',
+  START: 'بدء البوت',
+  MENU: 'فتح القائمة',
   HOME: 'الرئيسية',
   BACK: 'رجوع',
   INTERACTION: 'تفاعل مع القائمة',
@@ -11,9 +11,12 @@ export const usageLabels: Record<string, string> = {
 };
 
 export function activityDate(value: string) {
-  return new Intl.DateTimeFormat('ar-PS', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  return new Intl.DateTimeFormat('ar-PS-u-nu-latn', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
     timeZone: 'Asia/Hebron',
   }).format(new Date(value));
 }

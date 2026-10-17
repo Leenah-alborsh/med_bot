@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { usageQuery, type UsageFilters } from '../lib/bot-users';
+import styles from './bot-usage.module.css';
 
 export function BotUsageFilters({
   filters,
@@ -9,30 +10,30 @@ export function BotUsageFilters({
   search?: boolean;
 }) {
   return (
-    <form className="flow-filters" method="get">
+    <form className={`${styles.filters} ${search ? styles.withSearch : ''}`} method="get">
       {search && (
-        <label>
+        <label className={styles.searchField}>
           بحث بالاسم أو المعرّف
           <input
             name="search"
             defaultValue={filters.search}
             maxLength={100}
-            placeholder="اسم المستخدم أو Telegram ID"
+            placeholder="الاسم، اسم المستخدم أو المعرّف"
           />
         </label>
       )}
       <label>
         من تاريخ (UTC)
-        <input type="date" name="from" defaultValue={filters.from} />
+        <input type="date" name="from" dir="ltr" defaultValue={filters.from} />
       </label>
       <label>
         إلى تاريخ (UTC)
-        <input type="date" name="to" defaultValue={filters.to} />
+        <input type="date" name="to" dir="ltr" defaultValue={filters.to} />
       </label>
-      <button type="submit">تطبيق</button>
-      <Link className="secondary-link" href="?">
-        مسح الفلاتر
-      </Link>
+      <div className={styles.filterActions}>
+        <button type="submit">تطبيق</button>
+        <Link href="?">مسح الفلاتر</Link>
+      </div>
     </form>
   );
 }
@@ -49,13 +50,19 @@ export function UsagePagination({
   filters: UsageFilters;
 }) {
   return (
-    <nav className="pagination" aria-label="صفحات النتائج">
+    <nav className={styles.pagination} aria-label="صفحات النتائج">
       <span>
         {total} نتيجة · الصفحة {page} من {Math.max(1, Math.ceil(total / pageSize))}
       </span>
-      {page > 1 && <Link href={`?${usageQuery(filters, String(page - 1))}`}>السابق</Link>}
+      {page > 1 && (
+        <Link className={styles.activityLink} href={`?${usageQuery(filters, String(page - 1))}`}>
+          السابق
+        </Link>
+      )}
       {page * pageSize < total && (
-        <Link href={`?${usageQuery(filters, String(page + 1))}`}>التالي</Link>
+        <Link className={styles.activityLink} href={`?${usageQuery(filters, String(page + 1))}`}>
+          التالي
+        </Link>
       )}
     </nav>
   );

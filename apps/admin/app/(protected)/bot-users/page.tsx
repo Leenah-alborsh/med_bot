@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { Activity, CalendarDays, FileText, LogIn, Users, UserCheck } from 'lucide-react';
+import styles from '../../../src/components/bot-usage.module.css';
 import { getCurrentAdmin, serverApi, ServerApiError } from '../../../src/lib/server-api';
 import {
   activityDate,
@@ -61,38 +63,69 @@ export default async function BotUsersPage({
         <div>
           <p className="eyebrow">للسوبر أدمن</p>
           <h1>مستخدمو البوت</h1>
-          <p className="muted">
+          <p className={`muted ${styles.intro}`}>
             الجلسة تبدأ بأول تفاعل، ثم بعد انقطاع 30 دقيقة. فتح المحادثة وحده لا يُحسب. عدّ الجلسات
             والتفاعلات يبدأ من تفعيل التتبّع؛ سجلات المحتوى السابقة متاحة.
           </p>
         </div>
       </header>
       <BotUsageFilters filters={filters} search />
-      <section className="metric-grid">
+      <section className={styles.metrics} aria-label="ملخص الاستخدام">
         {[
-          ['المستخدمون المطابقون', result.total],
-          ['جلسات ضمن الفلتر', result.summary.sessions],
-          ['تفاعلات ضمن الفلتر', result.summary.interactions],
-          ['طلبات محتوى ضمن الفلتر', result.summary.contentUses],
-          ['نشطون خلال 24 ساعة · جميع المستخدمين', result.summary.activeToday],
-          ['نشطون خلال 7 أيام · جميع المستخدمين', result.summary.activeWeek],
-        ].map(([label, value], index) => (
-          <article className="metric" key={label} data-tone={index % 3}>
-            <span>{label}</span>
-            <strong>{value}</strong>
+          { label: 'المستخدمون', value: result.total, icon: Users, note: 'حسب الفلاتر المحددة' },
+          {
+            label: 'الجلسات',
+            value: result.summary.sessions,
+            icon: LogIn,
+            note: 'حسب الفلاتر المحددة',
+          },
+          {
+            label: 'التفاعلات',
+            value: result.summary.interactions,
+            icon: Activity,
+            note: 'حسب الفلاتر المحددة',
+          },
+          {
+            label: 'طلبات المحتوى',
+            value: result.summary.contentUses,
+            icon: FileText,
+            note: 'حسب الفلاتر المحددة',
+          },
+          {
+            label: 'نشطون خلال 24 ساعة',
+            value: result.summary.activeToday,
+            icon: UserCheck,
+            note: 'جميع المستخدمين',
+          },
+          {
+            label: 'نشطون خلال 7 أيام',
+            value: result.summary.activeWeek,
+            icon: CalendarDays,
+            note: 'جميع المستخدمين',
+          },
+        ].map(({ label, value, icon: Icon, note }) => (
+          <article className={styles.metric} key={label}>
+            <p>{label}</p>
+            <span className={styles.metricIcon} aria-hidden="true">
+              <Icon size={20} />
+            </span>
+            <strong>{value.toLocaleString('en-US')}</strong>
+            <small>{note}</small>
           </article>
         ))}
       </section>
-      <div className="table-wrap">
+      <div className={styles.tableHeading}>
+        <h2>قائمة المستخدمين</h2>
+        <p>مرتبة حسب آخر نشاط · {result.total.toLocaleString('en-US')} مستخدم</p>
+      </div>
+      <div className={`table-wrap ${styles.usersTable}`}>
         <table>
           <thead>
             <tr>
               <th>المستخدم</th>
               <th>السنة</th>
-              <th>أول استخدام / آخر نشاط</th>
-              <th>الجلسات</th>
-              <th>مرات /start</th>
-              <th>التفاعلات</th>
+              <th>أوقات النشاط</th>
+              <th>نشاط البوت</th>
               <th>المحتوى المستخدم</th>
               <th>التفاصيل</th>
             </tr>
@@ -100,32 +133,59 @@ export default async function BotUsersPage({
           <tbody>
             {result.items.map((user) => (
               <tr key={user.id}>
-                <td>
+                <td className={styles.userCell}>
                   <strong>{userName(user)}</strong>
-                  <span className="table-subtitle" dir="ltr">
-                    {user.username ? `@${user.username} · ` : ''}
-                    {user.telegramUserId}
-                  </span>
+                  <div className={styles.identity}>
+                    {user.username && <bdi>@{user.username}</bdi>}
+                    <bdi>{user.telegramUserId}</bdi>
+                  </div>
                 </td>
-                <td>{user.selectedAcademicYear?.nameAr ?? 'غير محددة'}</td>
-                <td>
-                  {activityDate(user.firstSeenAt)}
-                  <span className="table-subtitle">{activityDate(user.lastSeenAt)}</span>
+                <td data-label="السنة الدراسية">
+                  {user.selectedAcademicYear?.nameAr ?? 'غير محددة'}
                 </td>
-                <td>{user.sessions}</td>
-                <td>{user.starts}</td>
-                <td>{user.interactions}</td>
                 <td>
-                  {user.contentUses.map((row) => (
-                    <span className="table-subtitle" key={row.type}>
-                      {usageLabels[row.type] ?? row.type}: {row.count}
-                    </span>
-                  ))}
-                  {!user.contentUses.length && '—'}
+                  <div className={styles.dates}>
+                    <div className={styles.dateLine}>
+                      <small>آخر نشاط</small>
+                      <time dateTime={user.lastSeenAt}>{activityDate(user.lastSeenAt)}</time>
+                    </div>
+                    <div className={styles.dateLine}>
+                      <small>أول استخدام</small>
+                      <time dateTime={user.firstSeenAt}>{activityDate(user.firstSeenAt)}</time>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div className={styles.counts}>
+                    <div>
+                      <strong>{user.sessions}</strong>
+                      <small>جلسات</small>
+                    </div>
+                    <div>
+                      <strong>{user.starts}</strong>
+                      <small>
+                        <bdi dir="ltr">/start</bdi>
+                      </small>
+                    </div>
+                    <div>
+                      <strong>{user.interactions}</strong>
+                      <small>تفاعلات</small>
+                    </div>
+                  </div>
+                </td>
+                <td data-label="المحتوى المستخدم">
+                  <div className={styles.contentUses}>
+                    {user.contentUses.map((row) => (
+                      <span className={styles.contentBadge} key={row.type}>
+                        {usageLabels[row.type] ?? row.type} <strong>{row.count}</strong>
+                      </span>
+                    ))}
+                    {!user.contentUses.length && '—'}
+                  </div>
                 </td>
                 <td>
                   <Link
-                    className="secondary-link"
+                    className={styles.activityLink}
                     href={`/bot-users/${user.id}?${usageQuery({ from: filters.from, to: filters.to })}`}
                   >
                     عرض النشاط
@@ -140,7 +200,7 @@ export default async function BotUsersPage({
         )}
       </div>
       <UsagePagination {...result} filters={filters} />
-      <p className="muted">
+      <p className={styles.footnote}>
         الأوقات بتوقيت فلسطين. طلب الرابط يعني إرسال الرابط للمستخدم؛ لا يؤكد فتحه في المتصفح. طلب
         الملف لا يؤكد تنزيله على الجهاز.
       </p>

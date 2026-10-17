@@ -10,6 +10,7 @@ import {
   type UsageFilters,
 } from '../../../../src/lib/bot-users';
 import { BotUsageFilters, UsagePagination } from '../../../../src/components/bot-usage-filters';
+import styles from '../../../../src/components/bot-usage.module.css';
 
 type Result = {
   student: UserIdentity;
@@ -78,17 +79,17 @@ export default async function BotUserPage({
             {activityDate(result.student.lastSeenAt)}
           </p>
         </div>
-        <Link className="secondary-link" href="/bot-users">
+        <Link className={styles.activityLink} href="/bot-users">
           جميع المستخدمين
         </Link>
       </header>
       <BotUsageFilters filters={filters} />
       <section>
         <h2>التفاعلات ضمن الفترة</h2>
-        <div className="metric-grid">
+        <div className={styles.metrics}>
           {result.actions.map((row) => (
-            <article className="metric" key={row.action}>
-              <span>{usageLabels[row.action] ?? row.action}</span>
+            <article className={styles.metric} key={row.action}>
+              <p>{usageLabels[row.action] ?? row.action}</p>
               <strong>{row.count}</strong>
             </article>
           ))}
@@ -99,7 +100,7 @@ export default async function BotUserPage({
       </section>
       <section>
         <h2>المحتوى الذي استخدمه</h2>
-        <div className="table-wrap">
+        <div className={`table-wrap ${styles.detailTable}`}>
           <table>
             <thead>
               <tr>
@@ -112,13 +113,15 @@ export default async function BotUserPage({
             <tbody>
               {result.content.map((row) => (
                 <tr key={row.id}>
-                  <td>{row.contentItem.titleAr}</td>
-                  <td>
+                  <td data-label="المحتوى">{row.contentItem.titleAr}</td>
+                  <td data-label="المادة / القسم">
                     {row.contentItem.section.course.nameAr}
                     <span className="table-subtitle">{row.contentItem.section.nameAr}</span>
                   </td>
-                  <td>{usageLabels[row.eventType] ?? row.eventType}</td>
-                  <td>{activityDate(row.createdAt)}</td>
+                  <td data-label="الإجراء">{usageLabels[row.eventType] ?? row.eventType}</td>
+                  <td data-label="الوقت بتوقيت فلسطين">
+                    <time dateTime={row.createdAt}>{activityDate(row.createdAt)}</time>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -129,7 +132,7 @@ export default async function BotUserPage({
       </section>
       <section>
         <h2>آخر 25 تفاعلًا ضمن الفترة</h2>
-        <div className="table-wrap">
+        <div className={`table-wrap ${styles.detailTable}`}>
           <table>
             <thead>
               <tr>
@@ -141,9 +144,11 @@ export default async function BotUserPage({
             <tbody>
               {result.recentInteractions.map((row) => (
                 <tr key={row.id}>
-                  <td>{usageLabels[row.action] ?? row.action}</td>
-                  <td>{row.isSessionStart ? 'بداية جلسة' : 'استمرار'}</td>
-                  <td>{activityDate(row.createdAt)}</td>
+                  <td data-label="التفاعل">{usageLabels[row.action] ?? row.action}</td>
+                  <td data-label="الجلسة">{row.isSessionStart ? 'بداية جلسة' : 'استمرار'}</td>
+                  <td data-label="الوقت بتوقيت فلسطين">
+                    <time dateTime={row.createdAt}>{activityDate(row.createdAt)}</time>
+                  </td>
                 </tr>
               ))}
             </tbody>
