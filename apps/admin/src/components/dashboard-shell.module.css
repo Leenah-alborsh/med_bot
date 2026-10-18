@@ -1,0 +1,30 @@
+@media (min-width: 981px) {
+  .shell > aside {
+    position: fixed;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    width: 264px;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    z-index: 40;
+  }
+
+  .shell:global(.is-collapsed) > aside {
+    width: 82px;
+  }
+
+  .shell > :global(.content-shell) {
+    grid-column: 2;
+  }
+
+  .shell > aside > nav {
+    min-height: 0;
+    overscroll-behavior-y: contain;
+  }
+
+  .shell > aside > :global(.brand),
+  .shell > aside > :global(.account) {
+    flex-shrink: 0;
+  }
+}

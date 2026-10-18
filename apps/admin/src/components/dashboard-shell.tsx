@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Menu, PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import { ActionHistoryControls } from './action-history-controls';
 import { HubBrand } from './hub-brand';
+import styles from './dashboard-shell.module.css';
 
 export function DashboardShell({
   navigation,
@@ -37,7 +38,7 @@ export function DashboardShell({
   }, []);
 
   return (
-    <div className={`app-shell dashboard-shell${collapsed ? ' is-collapsed' : ''}`}>
+    <div className={`app-shell dashboard-shell ${styles.shell}${collapsed ? ' is-collapsed' : ''}`}>
       <aside className="sidebar">
         <HubBrand />
         <nav aria-label="التنقل الرئيسي">{navigation}</nav>
