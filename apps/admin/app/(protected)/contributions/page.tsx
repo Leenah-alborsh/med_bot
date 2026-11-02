@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getCurrentAdmin, serverApi } from '../../../src/lib/server-api';
+import { getCurrentAdmin, serverApi, ServerApiError } from '../../../src/lib/server-api';
 import { contributionLabels } from '../../../src/lib/contribution-labels';
 
 type Report = {
@@ -56,7 +56,39 @@ export default async function Page({
   if (search.month) query.set('month', search.month);
   if (search.adminId) query.set('adminId', search.adminId);
   if (search.page) query.set('page', search.page);
-  const data = await serverApi<Report>(`audit/contributions?${query}`);
+  let data: Report;
+  try {
+    data = await serverApi<Report>(`audit/contributions?${query}`);
+  } catch (error) {
+    // Keep authentication redirects intact and report failed API requests without
+    // crashing the entire dashboard or pretending the team has zero activity.
+    if (!(error instanceof ServerApiError) && !(error instanceof TypeError)) throw error;
+    const status = error instanceof ServerApiError ? error.status : null;
+    const message =
+      status === 404
+        ? 'واجهة الموقع محدثة، لكن خدمة مساهمات المشرفين غير متوفرة في الـAPI. تحققي من اكتمال نشر خدمة الـAPI على Render.'
+        : status === 403
+          ? 'حسابك لا يملك صلاحية قراءة تقرير المساهمات. يلزم دور سوبر أدمن وصلاحية قراءة سجل العمليات.'
+          : status === 400
+            ? 'تعذر قراءة فلاتر التقرير. افتحي التقرير من جديد لاستخدام الشهر الحالي.'
+            : 'تعذر تحميل المساهمات من خدمة الـAPI. تحققي من حالة الخدمة وسجل الأخطاء على Render، ثم أعيدي المحاولة.';
+    return (
+      <main className="page">
+        <header className="page-heading">
+          <h1>مساهمات المشرفين</h1>
+        </header>
+        <section role="alert">
+          <h2>تعذر تحميل التقرير</h2>
+          <p>{message}</p>
+          {status !== null && <p>حالة استجابة الخدمة: {status}</p>}
+          <p>لم تُحمّل الإحصاءات؛ لا تعني هذه الرسالة عدم وجود مساهمات.</p>
+          <Link href="/contributions">إعادة المحاولة بالشهر الحالي</Link>
+          {' · '}
+          <Link href="/dashboard">العودة للرئيسية</Link>
+        </section>
+      </main>
+    );
+  }
   const selected = data.items.find((item) => item.id === search.adminId);
   const detailUrl = (id: string, page = 1) =>
     `/contributions?${new URLSearchParams({ month: data.month, adminId: id, page: String(page) })}`;
