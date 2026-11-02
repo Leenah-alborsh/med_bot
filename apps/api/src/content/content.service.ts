@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -173,6 +175,11 @@ export class ContentService {
         contentCategoryId: true,
         contentCategory: { select: { nameAr: true } },
         state: true,
+        attachments: {
+          where: { archivedAt: null },
+          select: { id: true, originalFilename: true },
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        },
         section: {
           select: {
             nameAr: true,
@@ -213,6 +220,53 @@ export class ContentService {
       row.section.course.semester.academicYearId,
     );
     return this.serialize(row);
+  }
+
+  async openAttachment(
+    id: string,
+    attachmentId: string,
+    actor: AuthenticatedAdmin,
+  ): Promise<{
+    url?: string;
+    body?: ReadableStream<Uint8Array>;
+    filename: string;
+    mimeType?: string;
+  }> {
+    // Reuse the content scope check for drafts, published and archived content.
+    await this.get(id, actor);
+    const file = await this.prisma.contentAttachment.findFirst({
+      where: { id: attachmentId, contentItemId: id, archivedAt: null },
+    });
+    if (!file) throw new NotFoundException('Attachment not found');
+    if (
+      !actor.permissions.includes('content.read') &&
+      !(actor.permissions.includes('content.update') && file.uploadedById === actor.id)
+    ) {
+      throw new ForbiddenException('You may only open your own uploads');
+    }
+    if (file.storageProvider === 'EXTERNAL_URL' && file.externalUrl) {
+      return { url: validateExternalUrl(file.externalUrl), filename: file.originalFilename };
+    }
+    if (!file.telegramFileId) throw new NotFoundException('File is unavailable');
+    try {
+      const body = await this.telegramStorage.open(file.telegramFileId);
+      return { body, filename: file.originalFilename, mimeType: file.mimeType };
+    } catch (error) {
+      // Telegram cloud downloads have size limits. Keep the original channel
+      // message available for admins who already have access to that channel.
+      const chat = file.storageChatId?.toString();
+      if (
+        error instanceof ServiceUnavailableException &&
+        chat?.startsWith('-100') &&
+        file.storageMessageId
+      ) {
+        return {
+          url: `https://t.me/c/${chat.slice(4)}/${file.storageMessageId}`,
+          filename: file.originalFilename,
+        };
+      }
+      throw error;
+    }
   }
 
   async create(input: ContentInput, actor: Actor, metadata: RequestMetadata) {
@@ -464,6 +518,7 @@ export class ContentService {
     await this.assertScope(actor, target.courseId, target.academicYearId);
     const data = {
       contentItemId: id,
+      uploadedById: actor.id,
       storageProvider: input.storageProvider,
       originalFilename: basename(input.originalFilename),
       externalUrl: input.externalUrl ? validateExternalUrl(input.externalUrl) : null,

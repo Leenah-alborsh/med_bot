@@ -1,6 +1,7 @@
 export type UploadTarget = {
   id: string;
   titleAr: string;
+  attachments?: Array<{ id: string; originalFilename: string }>;
   sectionId?: string;
   contentCategoryId?: string;
   contentCategory?: { nameAr: string };

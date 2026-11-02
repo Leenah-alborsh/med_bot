@@ -8,12 +8,16 @@ import {
   Post,
   Query,
   Req,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { Readable } from 'node:stream';
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import { CurrentAdmin } from '../auth/current-admin.decorator.js';
 import type { AuthenticatedAdmin } from '../auth/auth.types.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
@@ -71,6 +75,43 @@ export class ContentController {
   get(@Param('id') id: string, @CurrentAdmin() actor: AuthenticatedAdmin) {
     return this.content.get(id, actor);
   }
+  @Get(':id/attachments/:attachmentId/open')
+  async openAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.content.openAttachment(id, attachmentId, actor);
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    if ('url' in file && file.url) {
+      response.status(302).setHeader('Location', file.url);
+      return;
+    }
+    const safeInline = new Set([
+      'application/pdf',
+      'image/png',
+      'image/jpeg',
+      'image/gif',
+      'image/webp',
+      'audio/mpeg',
+      'video/mp4',
+      'video/webm',
+    ]);
+    const mime =
+      file.mimeType && safeInline.has(file.mimeType) ? file.mimeType : 'application/octet-stream';
+    const filename = encodeURIComponent(file.filename).replace(
+      /['()*]/g,
+      (char) => '%' + char.charCodeAt(0).toString(16),
+    );
+    response.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+    return new StreamableFile(Readable.fromWeb(file.body! as NodeReadableStream), {
+      type: mime,
+      disposition: `${mime === 'application/octet-stream' ? 'attachment' : 'inline'}; filename*=UTF-8''${filename}`,
+    });
+  }
+
   @Post()
   @UseGuards(CsrfGuard)
   @RequirePermissions('content.create')

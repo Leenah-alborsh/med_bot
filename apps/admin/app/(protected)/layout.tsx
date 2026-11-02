@@ -24,6 +24,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const admin = await getCurrentAdmin();
   const nav = [
     {
+      href: '/contributions',
+      label: 'مساهمات المشرفين',
+      icon: BarChart3,
+      show: admin.roleKeys.includes('super-admin'),
+    },
+    {
       href: '/bot-users',
       label: 'مستخدمو البوت',
       icon: Users,
@@ -131,7 +137,10 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         '/uploads',
       ],
     },
-    { label: 'الإدارة والمتابعة', paths: ['/bot-management', '/reports', '/admins', '/audit'] },
+    {
+      label: 'الإدارة والمتابعة',
+      paths: ['/bot-management', '/reports', '/admins', '/contributions', '/audit'],
+    },
   ];
   const visibleNav = nav.filter((item) => item.show);
   const navigation = groups.map((group) => {

@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { FileUp, Search, RotateCcw, UploadCloud } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
@@ -30,6 +31,7 @@ export function AdminFileUploader({
   items: UploadTarget[];
   maxUploadBytes: number;
 }) {
+  const router = useRouter();
   const [message, setMessage] = useState('');
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [query, setQuery] = useState('');
@@ -77,6 +79,7 @@ export function AdminFileUploader({
       }
       setMessage(`تم رفع ${files.length} ملف إلى قناة Telegram بنجاح.`);
       form.reset();
+      router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'تعذر رفع الملف.');
     } finally {
@@ -94,6 +97,10 @@ export function AdminFileUploader({
         <div>
           <p className="eyebrow">إدارة الملفات</p>
           <h1>رفع الملفات</h1>
+          <p className="muted">
+            يمكن فتح المرفقات من هنا حتى بعد نشرها. إذا تعذر تنزيل ملف من تليجرام، قد يُفتح منشوره
+            الأصلي، ويتطلب ذلك صلاحية الوصول لقناة التخزين.
+          </p>
           <p className="muted">الحد الأعلى للملف الواحد {maxUploadBytes / 1_000_000}MB.</p>
         </div>
       </header>
@@ -179,6 +186,21 @@ export function AdminFileUploader({
                     {item.contentCategory?.nameAr && <> / {item.contentCategory.nameAr}</>}
                   </p>
                 </div>
+                {!!item.attachments?.length && (
+                  <ul aria-label="الملفات المرفوعة">
+                    {item.attachments.map((file) => (
+                      <li key={file.id}>
+                        <a
+                          href={`/api/backend/content/${item.id}/attachments/${file.id}/open`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          فتح الملف: {file.originalFilename}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <form className="inline-upload" onSubmit={(event) => void upload(item.id, event)}>
                   <label>
                     <FileUp size={16} />

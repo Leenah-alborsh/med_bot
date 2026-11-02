@@ -21,9 +21,13 @@ export class TelegramFileStorageService {
   private readonly logger = new Logger(TelegramFileStorageService.name);
   private readonly api: Api | null;
   private readonly channelId: string | null;
+  private readonly token: string | undefined;
+  private readonly apiRoot: string;
 
   constructor(config: ConfigService<Environment, true>) {
     const token = config.get('MEDICAL_BOT_TOKEN', { infer: true });
+    this.token = token;
+    this.apiRoot = config.get('TELEGRAM_API_ROOT', { infer: true }) ?? 'https://api.telegram.org';
     this.channelId = config.get('TELEGRAM_FILE_CHANNEL_ID', { infer: true }) ?? null;
     this.api = token
       ? new Api(token, {
@@ -66,6 +70,33 @@ export class TelegramFileStorageService {
       throw new ServiceUnavailableException(
         `تعذر رفع الملف إلى مستودع Telegram. تحقق من إعداد القناة وحجم الملف ونوعه.${mimeType ? '' : ''}`,
         { cause: error },
+      );
+    }
+  }
+
+  async open(fileId: string) {
+    if (!this.api || !this.token) throw new ServiceUnavailableException('مستودع الملفات غير مهيأ.');
+    try {
+      const file = await this.api.getFile(fileId);
+      if (
+        !file.file_path ||
+        file.file_path.startsWith('/') ||
+        file.file_path.split('/').includes('..')
+      ) {
+        throw new Error('Unsupported file path');
+      }
+      // The bot token stays on the server; never return Telegram download URLs to clients.
+      const root = this.apiRoot.replace(/\/$/, '');
+      const path = file.file_path.split('/').map(encodeURIComponent).join('/');
+      const response = await fetch(`${root}/file/bot${this.token}/${path}`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!response.ok || !response.body) throw new Error('File download failed');
+      return response.body;
+    } catch {
+      throw new ServiceUnavailableException(
+        'تعذر فتح الملف من تليجرام. قد يتجاوز حد تنزيل Bot API أو يحتاج إعداد خدمة الملفات المحلية.',
       );
     }
   }

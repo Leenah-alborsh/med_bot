@@ -432,6 +432,10 @@ export function ContentManager({
         <div>
           <p className="eyebrow">المكتبة التعليمية</p>
           <h1>المحتوى والملفات</h1>
+          <p className="muted">
+            روابط المرفقات تتيح عرض الملف أو تنزيله. الملفات التي يتعذر تنزيلها من تليجرام قد تفتح
+            منشورها الأصلي لمن لديه صلاحية القناة.
+          </p>
           <p className="muted">أنشئ المحتوى، أرفق موارده، ثم انشره للطلاب.</p>
         </div>
         {Object.values(filters).some(Boolean) && (
@@ -827,7 +831,19 @@ export function ContentManager({
                   </form>
                 )}
                 {!!item.attachments.length && (
-                  <small className="attachment-count">{item.attachments.length} مرفق</small>
+                  <ul aria-label="الملفات المرفقة">
+                    {item.attachments.map((file) => (
+                      <li key={file.id}>
+                        <a
+                          href={`/api/backend/content/${item.id}/attachments/${file.id}/open`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          فتح الملف: {file.originalFilename}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </article>
             ))}

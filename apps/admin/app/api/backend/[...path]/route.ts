@@ -24,10 +24,21 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
     headers,
     body,
     cache: 'no-store',
+    redirect: 'manual',
   });
   const responseHeaders = new Headers({
     'content-type': upstream.headers.get('content-type') ?? 'application/json',
   });
+  for (const name of [
+    'content-disposition',
+    'cache-control',
+    'x-content-type-options',
+    'content-security-policy',
+    'location',
+  ]) {
+    const value = upstream.headers.get(name);
+    if (value) responseHeaders.set(name, value);
+  }
   for (const cookie of upstream.headers.getSetCookie())
     responseHeaders.append('set-cookie', cookie);
   return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
