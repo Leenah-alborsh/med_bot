@@ -34,7 +34,10 @@ function setup() {
     storage as unknown as TelegramFileStorageService,
     {} as UploadTicketService,
   );
-  const scopeCheck = vi.spyOn(service, 'get').mockResolvedValue({ state: 'PUBLISHED' });
+  // openAttachment only awaits this authorization check; it does not consume the
+  // content payload. Keep the partial stub typed against the real method result.
+  const scopedContent = { state: 'PUBLISHED' } as Awaited<ReturnType<ContentService['get']>>;
+  const scopeCheck = vi.spyOn(service, 'get').mockResolvedValue(scopedContent);
   return { service, prisma, storage, scopeCheck };
 }
 describe('authenticated attachment access', () => {
