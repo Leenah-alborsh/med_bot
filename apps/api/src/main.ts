@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { adminCorsOrigins } from './config/cors.js';
 import cookieParser from 'cookie-parser';
 import { Logger, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -22,7 +23,7 @@ async function bootstrap() {
   app.use(cookieParser());
   app.useGlobalFilters(new HttpExceptionFilter());
   app.enableCors({
-    origin: config.get('API_CORS_ORIGIN', { infer: true }),
+    origin: adminCorsOrigins(config.get('API_CORS_ORIGIN', { infer: true })),
     credentials: true,
     allowedHeaders: ['Content-Type', 'X-CSRF-Token', 'X-Upload-Ticket'],
   });

@@ -1,17 +1,18 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { FileUp, Search, RotateCcw, UploadCloud } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { clientApi, clientUpload } from '../lib/client-api';
 import { uploadTooLargeMessage } from '../lib/upload-limits';
 import {
   changeUploadFilter,
   emptyUploadFilters,
-  matchesUploadTarget,
   uploadFilterKeys,
   uploadFilterOptions,
   type UploadTarget,
+  type UploadFilters,
 } from '../lib/upload-target-filters';
 
 export type { UploadTarget } from '../lib/upload-target-filters';
@@ -26,19 +27,51 @@ const filterLabels = {
 
 export function AdminFileUploader({
   items,
+  filterItems,
+  total,
+  page,
+  pageSize,
+  initialFilters,
+  initialQuery,
   maxUploadBytes,
+  uploadBaseUrl,
 }: {
   items: UploadTarget[];
+  filterItems: UploadTarget[];
+  total: number;
+  page: number;
+  pageSize: number;
+  initialFilters: UploadFilters;
+  initialQuery: string;
   maxUploadBytes: number;
+  uploadBaseUrl?: string;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState('');
   const [progress, setProgress] = useState<Record<string, number>>({});
-  const [query, setQuery] = useState('');
-  const [filters, setFilters] = useState(emptyUploadFilters);
-  const visibleIds = new Set(
-    items.filter((item) => matchesUploadTarget(item, filters, query)).map((item) => item.id),
+  const [query, setQuery] = useState(initialQuery);
+  const [filters, setFilters] = useState(initialFilters);
+  const options = useMemo(
+    () =>
+      Object.fromEntries(
+        uploadFilterKeys.map((key) => [key, uploadFilterOptions(filterItems, filters, key)]),
+      ),
+    [filterItems, filters],
   );
+  const queryKeys = {
+    year: 'yearId',
+    semester: 'semesterId',
+    course: 'courseId',
+    section: 'sectionId',
+    category: 'contentCategoryId',
+  } as const;
+  const pageUrl = (number: number) => {
+    const params = new URLSearchParams({ page: String(number) });
+    for (const key of uploadFilterKeys)
+      if (initialFilters[key]) params.set(queryKeys[key], initialFilters[key]);
+    if (initialQuery) params.set('search', initialQuery);
+    return `/uploads?${params}`;
+  };
   const hasFilters = Boolean(query || Object.values(filters).some(Boolean));
 
   async function upload(targetId: string, event: FormEvent<HTMLFormElement>) {
@@ -75,6 +108,7 @@ export function AdminFileUploader({
               [targetId]: Math.round(((index + value / 100) / files.length) * 100),
             })),
           ticket,
+          uploadBaseUrl,
         );
       }
       setMessage(`تم رفع ${files.length} ملف إلى قناة Telegram بنجاح.`);
@@ -111,13 +145,20 @@ export function AdminFileUploader({
         </p>
       )}
 
-      <section className="upload-filter-panel" aria-label="بحث وفلترة الملفات">
+      <form
+        method="get"
+        action="/uploads"
+        className="upload-filter-panel"
+        aria-label="بحث وفلترة الملفات"
+      >
         <div className="upload-search-row">
           <label className="upload-search">
             <Search size={19} aria-hidden="true" />
             <span className="sr-only">البحث عن المحتوى أو القسم</span>
             <input
               type="search"
+              name="search"
+              maxLength={100}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="ابحث باسم المحتوى أو المادة أو القسم…"
@@ -132,6 +173,7 @@ export function AdminFileUploader({
             onClick={() => {
               setQuery('');
               setFilters(emptyUploadFilters);
+              router.push('/uploads');
             }}
           >
             <RotateCcw size={18} />
@@ -143,13 +185,14 @@ export function AdminFileUploader({
               {filterLabels[key]}
               <select
                 aria-label={filterLabels[key]}
+                name={queryKeys[key]}
                 value={filters[key]}
                 onChange={(event) =>
                   setFilters((current) => changeUploadFilter(current, key, event.target.value))
                 }
               >
                 <option value="">الكل</option>
-                {uploadFilterOptions(items, filters, key).map((option) => (
+                {(options[key] ?? []).map((option) => (
                   <option key={option.id} value={option.id}>
                     {option.name}
                   </option>
@@ -159,19 +202,20 @@ export function AdminFileUploader({
           ))}
         </div>
         <p className="muted upload-result-count" role="status">
-          عرض {visibleIds.size} من {items.length}
+          عرض {items.length} من {total} — الصفحة {page}
         </p>
-      </section>
-
-      {items.length > 0 && visibleIds.size === 0 && (
-        <p className="empty-state">لا توجد نتائج مطابقة للبحث والفلاتر.</p>
-      )}
+        <button type="submit">تطبيق البحث والفلاتر</button>
+      </form>
+      <nav className="row-actions" aria-label="صفحات رفع الملفات">
+        {page > 1 && <Link href={pageUrl(page - 1)}>السابق</Link>}
+        {page * pageSize < total && <Link href={pageUrl(page + 1)}>التالي</Link>}
+      </nav>
       {items.length ? (
         <section className="content-list">
           {items.map((item) => {
             const currentProgress = progress[item.id];
             return (
-              <article className="content-row" key={item.id} hidden={!visibleIds.has(item.id)}>
+              <article className="content-row" key={item.id}>
                 <div>
                   <div className="row-title">
                     <UploadCloud size={18} />

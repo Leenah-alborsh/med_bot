@@ -105,7 +105,7 @@ describe('admin file upload access', () => {
     const findMany = vi.fn().mockResolvedValue([row]);
     const service = createService({
       prisma: {
-        contentItem: { findMany },
+        contentItem: { findMany, count: vi.fn().mockResolvedValue(1) },
         adminScope: {
           findMany: vi
             .fn()
@@ -117,7 +117,12 @@ describe('admin file upload access', () => {
       tickets: {},
     });
 
-    await expect(service.uploadTargets(admin)).resolves.toEqual({ items: [row] });
+    await expect(service.uploadTargets(admin)).resolves.toEqual({
+      items: [row],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+    });
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

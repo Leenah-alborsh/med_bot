@@ -40,6 +40,11 @@ const metadata = (request: Request) => ({
 export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
 
+  @Get('options')
+  @RequirePermissions('catalog.read')
+  options(@CurrentAdmin() actor: AuthenticatedAdmin) {
+    return this.catalog.options(actor);
+  }
   @Get('years')
   @RequirePermissions('catalog.read')
   years(

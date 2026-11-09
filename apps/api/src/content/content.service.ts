@@ -22,6 +22,30 @@ import { TelegramFileStorageService } from './telegram-file-storage.service.js';
 import { UploadTicketService } from './upload-ticket.service.js';
 
 type Actor = Pick<AuthenticatedAdmin, 'id' | 'roleKeys'>;
+const uploadLocationSelect = {
+  sectionId: true,
+  contentCategoryId: true,
+  contentCategory: { select: { nameAr: true } },
+  section: {
+    select: {
+      nameAr: true,
+      course: {
+        select: {
+          id: true,
+          nameAr: true,
+          semester: {
+            select: {
+              id: true,
+              nameAr: true,
+              academicYearId: true,
+              academicYear: { select: { nameAr: true } },
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
 const privateHost =
   /^(localhost|127\.|0\.|10\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$)/i;
 
@@ -159,50 +183,69 @@ export class ContentService {
     };
   }
 
-  async uploadTargets(actor: Actor) {
+  async uploadTargets(actor: Actor, query: ListContentInput = { page: 1, pageSize: 25 }) {
     const scope = await this.scopeWhere(actor);
+    const filters: Prisma.ContentItemWhereInput[] = [scope];
+    if (query.yearId)
+      filters.push({ section: { course: { semester: { academicYearId: query.yearId } } } });
+    if (query.semesterId) filters.push({ section: { course: { semesterId: query.semesterId } } });
+    if (query.courseId) filters.push({ section: { courseId: query.courseId } });
+    if (query.sectionId) filters.push({ sectionId: query.sectionId });
+    if (query.contentCategoryId) filters.push({ contentCategoryId: query.contentCategoryId });
+    for (const word of query.search?.split(/\s+/).filter(Boolean) ?? []) {
+      filters.push({
+        OR: [
+          { titleAr: { contains: word, mode: 'insensitive' } },
+          { titleEn: { contains: word, mode: 'insensitive' } },
+          { section: { nameAr: { contains: word, mode: 'insensitive' } } },
+          { section: { course: { nameAr: { contains: word, mode: 'insensitive' } } } },
+          { attachments: { some: { originalFilename: { contains: word, mode: 'insensitive' } } } },
+        ],
+      });
+    }
+    const where: Prisma.ContentItemWhereInput = {
+      AND: filters,
+      contentType: 'FILE',
+      isActive: true,
+      archivedAt: null,
+    };
+    const [total, rows] = await Promise.all([
+      this.prisma.contentItem.count({ where }),
+      this.prisma.contentItem.findMany({
+        where,
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        select: {
+          id: true,
+          titleAr: true,
+          state: true,
+          ...uploadLocationSelect,
+          attachments: {
+            where: { archivedAt: null },
+            select: { id: true, originalFilename: true },
+            orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+          },
+        },
+        orderBy: [{ sectionId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
+      }),
+    ]);
+    return { items: rows, total, page: query.page, pageSize: query.pageSize };
+  }
+
+  async uploadTargetOptions(actor: Actor) {
+    // Only location metadata, one row per category; never fetch file lists for filters.
     const rows = await this.prisma.contentItem.findMany({
       where: {
-        AND: [scope],
+        AND: [await this.scopeWhere(actor)],
         contentType: 'FILE',
         isActive: true,
         archivedAt: null,
       },
-      select: {
-        id: true,
-        titleAr: true,
-        sectionId: true,
-        contentCategoryId: true,
-        contentCategory: { select: { nameAr: true } },
-        state: true,
-        attachments: {
-          where: { archivedAt: null },
-          select: { id: true, originalFilename: true },
-          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-        },
-        section: {
-          select: {
-            nameAr: true,
-            course: {
-              select: {
-                id: true,
-                nameAr: true,
-                semester: {
-                  select: {
-                    id: true,
-                    nameAr: true,
-                    academicYearId: true,
-                    academicYear: { select: { nameAr: true } },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: [{ sectionId: 'asc' }, { displayOrder: 'asc' }, { id: 'asc' }],
+      distinct: ['contentCategoryId'],
+      select: uploadLocationSelect,
+      orderBy: [{ contentCategoryId: 'asc' }],
     });
-    return { items: rows };
+    return { items: rows.map((row) => ({ ...row, id: row.contentCategoryId, titleAr: '' })) };
   }
 
   async get(id: string, actor: Actor) {

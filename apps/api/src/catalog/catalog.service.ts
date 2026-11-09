@@ -244,6 +244,65 @@ export class CatalogService {
     }));
     return this.page(await this.visible(actor, shaped), query);
   }
+  async options(actor: Actor) {
+    // One read per resource instead of re-reading the complete table for every
+    // 100-option page. Authorization and scope shaping stay in the existing methods.
+    const query = { page: 1, pageSize: Number.MAX_SAFE_INTEGER };
+    const [years, semesters, courses, sections, categories] = await Promise.all([
+      this.years(query, actor),
+      this.semesters(query, actor),
+      this.courses(query, actor),
+      this.sections(query, actor),
+      this.contentCategories(query, actor),
+    ]);
+    const compact = (result: {
+      items: Array<{
+        id: string;
+        nameAr: string;
+        academicYearId?: string;
+        semesterId?: string;
+        courseId?: string;
+        sectionId?: string;
+        hasSections?: boolean;
+        courseHasSections?: boolean;
+        isActive?: boolean;
+        archivedAt?: Date | null;
+      }>;
+    }) => ({
+      items: result.items.map(
+        ({
+          id,
+          nameAr,
+          academicYearId,
+          semesterId,
+          courseId,
+          sectionId,
+          hasSections,
+          courseHasSections,
+          isActive,
+          archivedAt,
+        }) => ({
+          id,
+          nameAr,
+          academicYearId,
+          semesterId,
+          courseId,
+          sectionId,
+          hasSections,
+          courseHasSections,
+          isActive,
+          archivedAt,
+        }),
+      ),
+    });
+    return {
+      years: compact(years),
+      semesters: compact(semesters),
+      courses: compact(courses),
+      sections: compact(sections),
+      'content-types': compact(categories),
+    };
+  }
   async create(
     kind: 'year' | 'semester' | 'course' | 'section' | 'content-type',
     input: Record<string, unknown>,

@@ -112,6 +112,7 @@ export function ContentManager({
   filters,
   inboxAvailable,
   maxUploadBytes,
+  uploadBaseUrl,
 }: {
   items: UnifiedContentItem[];
   total: number;
@@ -120,6 +121,7 @@ export function ContentManager({
   filters: ContentFilters;
   inboxAvailable: boolean;
   maxUploadBytes: number;
+  uploadBaseUrl?: string;
   categories: Option[];
   sections: Section[];
   courses: Option[];
@@ -220,6 +222,7 @@ export function ContentManager({
             [progressKey]: Math.round(((index + value / 100) / files.length) * 100),
           })),
         ticket,
+        uploadBaseUrl,
       );
     }
   }

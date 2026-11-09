@@ -62,8 +62,16 @@ export class ContentController {
   }
   @Get('upload-targets')
   @RequirePermissions('content.update')
-  uploadTargets(@CurrentAdmin() actor: AuthenticatedAdmin) {
-    return this.content.uploadTargets(actor);
+  uploadTargets(
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Query(new ZodValidationPipe(listContentSchema)) query: ListContentInput,
+  ) {
+    return this.content.uploadTargets(actor, query);
+  }
+  @Get('upload-target-options')
+  @RequirePermissions('content.update')
+  uploadTargetOptions(@CurrentAdmin() actor: AuthenticatedAdmin) {
+    return this.content.uploadTargetOptions(actor);
   }
   @Get(['upload-config', 'upload-config/dashboard'])
   @RequirePermissions('content.read')
