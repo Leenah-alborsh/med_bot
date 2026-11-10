@@ -56,3 +56,17 @@ need production measurements before choosing larger hosting.
   were generated from the schema with Prisma's npm WASM/type generator tools to
   validate types without native engine downloads. Database-backed execution and
   real Telegram delivery were not verified in this environment.
+
+## Upload-only admin accounts
+
+The upload configuration endpoint accepts either `content.read` or
+`content.update`, behind the existing authenticated session guard. Previously it
+required `content.read`, even though upload targets and tickets require
+`content.update`. This caused HTTP 403 while loading `/uploads` for upload-only
+accounts. Actual HTTP guard tests cover readers, upload-only accounts and denied
+unrelated roles.
+
+The uploads page reports known API/network failures inside the dashboard instead
+of throwing a generic server-render error. It identifies the failed dependency
+and HTTP status without logging private response bodies, preserves authentication
+redirects, and never presents failed loads as empty file lists.

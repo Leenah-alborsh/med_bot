@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -74,8 +75,16 @@ export class ContentController {
     return this.content.uploadTargetOptions(actor);
   }
   @Get(['upload-config', 'upload-config/dashboard'])
-  @RequirePermissions('content.read')
-  uploadConfig() {
+  uploadConfig(@CurrentAdmin() actor: AuthenticatedAdmin) {
+    // Upload-only admins need the limit before they can submit a file. Readers
+    // also use this endpoint on the content page; require either capability.
+    if (
+      !actor.permissions.some(
+        (permission) => permission === 'content.read' || permission === 'content.update',
+      )
+    ) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
     return { maxUploadBytes: uploadOptions.limits.fileSize, inboxClassificationAvailable: true };
   }
   @Get(':id')

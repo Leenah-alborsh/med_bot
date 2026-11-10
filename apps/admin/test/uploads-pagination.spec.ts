@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import Page from '../app/(protected)/uploads/page';
 import { serverApi, ServerApiError } from '../src/lib/server-api';
+import { getUploadConfig } from '../src/lib/server-upload-config';
 vi.stubGlobal('React', React);
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
@@ -19,7 +20,7 @@ vi.mock('../src/lib/server-api', () => ({
   },
 }));
 vi.mock('../src/lib/server-upload-config', () => ({
-  getUploadConfig: () => Promise.resolve({ maxUploadBytes: 50_000_000 }),
+  getUploadConfig: vi.fn(),
 }));
 const item = (i: number) => ({
   id: `c-${i}`,
@@ -41,7 +42,10 @@ const item = (i: number) => ({
     },
   },
 });
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(getUploadConfig).mockResolvedValue({ maxUploadBytes: 50_000_000 });
+});
 it('renders only the selected 25 rows and keeps filter options beyond the current page', async () => {
   vi.mocked(serverApi).mockImplementation((path) =>
     Promise.resolve(
@@ -77,5 +81,30 @@ it('keeps 25 rendered rows during a rolling deployment with the previous API', a
 });
 it('does not hide API failures behind empty data', async () => {
   vi.mocked(serverApi).mockRejectedValue(new ServerApiError(500));
-  await expect(Page({ searchParams: Promise.resolve({}) })).rejects.toThrow();
+  const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('تعذر تحميل صفحة الرفع');
+  expect(html).toContain('HTTP 500');
+  expect(html).not.toContain('class="content-row"');
+});
+
+it('shows the exact upload settings failure instead of crashing for an upload-only admin', async () => {
+  vi.mocked(serverApi).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
+  vi.mocked(getUploadConfig).mockRejectedValue(new ServerApiError(403));
+  const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('إعدادات الرفع');
+  expect(html).toContain('HTTP 403');
+  expect(html).toContain('role="alert"');
+  expect(html).not.toContain('class="content-row"');
+});
+it('retains authentication redirects instead of replacing them with an upload error', async () => {
+  vi.mocked(serverApi).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
+  vi.mocked(getUploadConfig).mockRejectedValue(new Error('redirect'));
+  await expect(Page({ searchParams: Promise.resolve({}) })).rejects.toThrow('redirect');
+});
+it('provides a retry screen for connection failures without leaking internal error messages', async () => {
+  vi.mocked(serverApi).mockRejectedValue(new TypeError('private internal hostname unavailable'));
+  const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('تعذر تحميل صفحة الرفع');
+  expect(html).toContain('href="/uploads"');
+  expect(html).not.toContain('private internal hostname');
 });
