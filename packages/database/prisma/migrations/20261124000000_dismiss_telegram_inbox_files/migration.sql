@@ -1,0 +1,1 @@
+ALTER TYPE "TelegramInboxStatus" ADD VALUE 'DISMISSED';

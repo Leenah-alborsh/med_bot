@@ -271,6 +271,36 @@ export class TelegramInboxService {
     return this.serialize({ items, total, page: input.page, pageSize: input.pageSize });
   }
 
+  async dismiss(id: string, actor: AuthenticatedAdmin, metadata: RequestMetadata) {
+    return this.prisma.$transaction(async (tx) => {
+      const dismissed = await tx.telegramChannelFile.updateMany({
+        where: { id, status: 'UNCLASSIFIED', contentItemId: null, attachmentId: null },
+        data: { status: 'DISMISSED' },
+      });
+      if (dismissed.count === 0) {
+        const existing = await tx.telegramChannelFile.findUnique({
+          where: { id },
+          select: { status: true },
+        });
+        if (!existing) throw new NotFoundException('الملف غير موجود.');
+        if (existing.status === 'DISMISSED') return { deleted: true };
+        throw new ConflictException('يمكن حذف الملفات غير المصنّفة فقط.');
+      }
+
+      await this.audit.record({
+        actorId: actor.id,
+        actionKey: 'telegram-inbox.delete',
+        entityType: 'TelegramChannelFile',
+        entityId: id,
+        before: { status: 'UNCLASSIFIED' },
+        after: { status: 'DISMISSED' },
+        metadata,
+        client: tx,
+      });
+      return { deleted: true };
+    });
+  }
+
   async classify(
     id: string,
     input: ClassifyTelegramInboxInput,

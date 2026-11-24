@@ -68,6 +68,7 @@ export default async function Page({
       targets={targets.items}
       canCreate={canCreate}
       canUpdate={canUpdate}
+      canDelete={hasPermission(admin, 'content.archive')}
       canPublish={hasPermission(admin, 'content.publish')}
       classificationReady={uploadConfig.inboxClassificationAvailable === true}
     />

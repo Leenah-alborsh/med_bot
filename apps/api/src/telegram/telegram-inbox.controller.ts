@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
 import { CurrentAdmin } from '../auth/current-admin.decorator.js';
 import type { AuthenticatedAdmin } from '../auth/auth.types.js';
@@ -29,6 +40,17 @@ export class TelegramInboxController {
   @RequirePermissions('content.read')
   list(@Query(new ZodValidationPipe(listTelegramInboxSchema)) query: ListTelegramInboxInput) {
     return this.inbox.list(query);
+  }
+
+  @Delete(':id')
+  @UseGuards(CsrfGuard)
+  @RequirePermissions('content.read', 'content.archive')
+  dismiss(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentAdmin() actor: AuthenticatedAdmin,
+    @Req() request: Request,
+  ) {
+    return this.inbox.dismiss(id, actor, metadata(request));
   }
 
   @Post([':id/classify', ':id/classify-existing'])

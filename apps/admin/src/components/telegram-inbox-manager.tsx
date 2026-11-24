@@ -51,6 +51,7 @@ type Props = {
   }>;
   canCreate: boolean;
   canUpdate: boolean;
+  canDelete: boolean;
   canPublish: boolean;
   classificationReady: boolean;
 };
@@ -78,6 +79,7 @@ export function TelegramInboxManager({
   targets,
   canCreate,
   canUpdate,
+  canDelete,
   canPublish,
   classificationReady,
 }: Props) {
@@ -120,6 +122,27 @@ export function TelegramInboxManager({
   function resetCategory() {
     setCategoryId('');
     setContentId('');
+  }
+
+  async function deleteFile(item: InboxFile) {
+    if (saving || !confirm(`حذف «${item.fileName}» من الملفات الواردة؟`)) return;
+
+    setSaving(true);
+    setMessage('');
+    try {
+      await clientApi(`telegram-inbox/${item.id}`, { method: 'DELETE' });
+      if (selectedId === item.id) setSelectedId('');
+      setMessage('تم حذف الملف من قائمة الوارد.');
+      if (page > 1 && total - 1 <= (page - 1) * pageSize) {
+        router.replace(`?page=${page - 1}&search=${encodeURIComponent(search)}`);
+      } else {
+        router.refresh();
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'تعذّر حذف الملف.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function classify(event: FormEvent<HTMLFormElement>) {
@@ -220,6 +243,17 @@ export function TelegramInboxManager({
                   <td>
                     <strong>{item.fileName}</strong>
                     <span className="table-subtitle">{item.mediaType}</span>
+                    {canDelete && (
+                      <button
+                        className="danger"
+                        type="button"
+                        disabled={saving}
+                        aria-label={`حذف ${item.fileName} من الملفات الواردة`}
+                        onClick={() => void deleteFile(item)}
+                      >
+                        حذف
+                      </button>
+                    )}
                   </td>
                   <td>{item.mimeType}</td>
                   <td dir="ltr">{formatSize(item.fileSize)}</td>

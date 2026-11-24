@@ -72,6 +72,7 @@ enum AnnouncementStatus {
 enum TelegramInboxStatus {
   UNCLASSIFIED
   CLASSIFIED
+  DISMISSED
 }
 
 model Bot {

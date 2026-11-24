@@ -24,7 +24,10 @@ const channelPost = (overrides: Record<string, unknown> = {}) => ({
 });
 
 function ingestionService(
-  saved: { id: string; attachmentId: string | null } = { id: 'inbox', attachmentId: null },
+  saved: { id: string; attachmentId: string | null; status?: string } = {
+    id: 'inbox',
+    attachmentId: null,
+  },
 ) {
   const tx = {
     telegramChannelFile: {
@@ -49,6 +52,20 @@ function ingestionService(
 }
 
 describe('Telegram Channel Inbox ingestion', () => {
+  it('keeps a dismissed channel post out of automatic classification on replay', async () => {
+    const { service, tx } = ingestionService({
+      id: 'inbox',
+      attachmentId: null,
+      status: 'DISMISSED',
+    });
+    await service.ingest(channelPost({ caption: 'MED-ABCDEF1234' }), channelId);
+    expect(tx.telegramChannelFile.upsert).toHaveBeenCalledWith(
+      partial({ update: partial({ linkCode: 'MED-ABCDEF1234' }) }),
+    );
+    expect(tx.telegramChannelFile.updateMany).not.toHaveBeenCalled();
+    expect(tx.contentItem.findUnique).not.toHaveBeenCalled();
+  });
+
   it('accepts files only from the configured storage channel', async () => {
     const { service, prisma, tx } = ingestionService();
     await expect(service.ingest(channelPost(), channelId)).resolves.toEqual({
@@ -302,6 +319,7 @@ describe('Telegram Channel Inbox classification', () => {
   function classificationService(assertResourceAccess = vi.fn().mockResolvedValue(undefined)) {
     const tx = {
       telegramChannelFile: {
+        findUnique: vi.fn(),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         update: vi.fn().mockResolvedValue({}),
       },
@@ -336,6 +354,31 @@ describe('Telegram Channel Inbox classification', () => {
     );
     return { service, prisma, tx, audit, assertResourceAccess };
   }
+
+  it('dismisses only unclassified, unlinked files and audits the change once on retry', async () => {
+    const { service, tx, audit } = classificationService();
+    await expect(service.dismiss('inbox', actor, {})).resolves.toEqual({ deleted: true });
+    expect(tx.telegramChannelFile.updateMany).toHaveBeenCalledWith({
+      where: { id: 'inbox', status: 'UNCLASSIFIED', contentItemId: null, attachmentId: null },
+      data: { status: 'DISMISSED' },
+    });
+    expect(audit.record).toHaveBeenCalledWith(
+      partial({ actionKey: 'telegram-inbox.delete', entityId: 'inbox', client: tx }),
+    );
+
+    tx.telegramChannelFile.updateMany.mockResolvedValue({ count: 0 });
+    tx.telegramChannelFile.findUnique.mockResolvedValue({ status: 'DISMISSED' });
+    await expect(service.dismiss('inbox', actor, {})).resolves.toEqual({ deleted: true });
+    expect(audit.record).toHaveBeenCalledOnce();
+  });
+
+  it('rejects dismissal when the file has already been classified', async () => {
+    const { service, tx, audit } = classificationService();
+    tx.telegramChannelFile.updateMany.mockResolvedValue({ count: 0 });
+    tx.telegramChannelFile.findUnique.mockResolvedValue({ status: 'CLASSIFIED' });
+    await expect(service.dismiss('inbox', actor, {})).rejects.toBeInstanceOf(ConflictException);
+    expect(audit.record).not.toHaveBeenCalled();
+  });
 
   it('blocks classification outside the admin scope before creating content', async () => {
     const denied = vi.fn().mockRejectedValue(new ForbiddenException());
