@@ -2,9 +2,9 @@
 
 import { Check, FileArchive, FilePlus2, Paperclip, Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { clientApi } from '../lib/client-api';
-import { inboxCategories } from '../lib/inbox-classification';
+import { inboxCategories, inboxTargets, type InboxTarget } from '../lib/inbox-classification';
 
 type InboxFile = {
   id: string;
@@ -42,13 +42,6 @@ type Props = {
   courses: Option[];
   sections: Option[];
   categories: Option[];
-  targets: Array<{
-    id: string;
-    titleAr: string;
-    sectionId: string;
-    contentCategoryId: string;
-    state: string;
-  }>;
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
@@ -76,7 +69,6 @@ export function TelegramInboxManager({
   courses,
   sections,
   categories,
-  targets,
   canCreate,
   canUpdate,
   canDelete,
@@ -94,6 +86,10 @@ export function TelegramInboxManager({
   const [contentId, setContentId] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [targetResult, setTargetResult] = useState<{
+    categoryId: string;
+    items?: InboxTarget[];
+  } | null>(null);
   const selected = items.find((item) => item.id === selectedId);
   const visibleSemesters = semesters.filter((item) => item.academicYearId === yearId);
   const visibleCourses = courses.filter((item) => item.semesterId === semesterId);
@@ -107,10 +103,28 @@ export function TelegramInboxManager({
     sectionChoice,
     hasSections,
   );
-  const visibleTargets = targets.filter((item) => item.contentCategoryId === categoryId);
   const validCategory = visibleCategories.some((item) => item.id === categoryId);
+  const targetCategory =
+    selected && canUpdate && classificationReady && mode === 'attach' && validCategory
+      ? categoryId
+      : '';
+  const currentTargets = targetResult?.categoryId === targetCategory ? targetResult : null;
+  const visibleTargets = currentTargets?.items ?? [];
   const validTarget = visibleTargets.some((item) => item.id === contentId);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+  useEffect(() => {
+    if (!targetCategory) return;
+    const controller = new AbortController();
+    void inboxTargets(targetCategory, controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) setTargetResult({ categoryId: targetCategory, items });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setTargetResult({ categoryId: targetCategory });
+      });
+    return () => controller.abort();
+  }, [targetCategory]);
 
   function resetPathAfterYear(value: string) {
     setYearId(value);
@@ -122,6 +136,7 @@ export function TelegramInboxManager({
   function resetCategory() {
     setCategoryId('');
     setContentId('');
+    setTargetResult(null);
   }
 
   async function deleteFile(item: InboxFile) {
@@ -421,6 +436,7 @@ export function TelegramInboxManager({
                   onChange={(event) => {
                     setCategoryId(event.target.value);
                     setContentId('');
+                    setTargetResult(null);
                   }}
                 >
                   <option value="">اختر نوع المحتوى</option>
@@ -442,7 +458,7 @@ export function TelegramInboxManager({
                       aria-label="المحتوى"
                       value={contentId}
                       required
-                      disabled={!categoryId}
+                      disabled={!visibleTargets.length}
                       onChange={(event) => setContentId(event.target.value)}
                     >
                       <option value="">اختر المحتوى</option>
@@ -454,8 +470,14 @@ export function TelegramInboxManager({
                       ))}
                     </select>
                   </label>
-                  {categoryId && !visibleTargets.length && (
-                    <p className="form-message">لا يوجد محتوى ملفات متاح في هذا النوع.</p>
+                  {targetCategory && !visibleTargets.length && (
+                    <p className="form-message" role="status">
+                      {!currentTargets
+                        ? 'جارٍ تحميل المحتوى…'
+                        : currentTargets.items
+                          ? 'لا يوجد محتوى ملفات متاح في هذا النوع.'
+                          : 'تعذّر تحميل المحتوى. أعيدي اختيار نوع المحتوى للمحاولة مرة أخرى.'}
+                    </p>
                   )}
                 </>
               ) : (

@@ -21,14 +21,6 @@ type Option = {
   hasSections?: boolean;
 };
 type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number };
-type ContentTarget = {
-  id: string;
-  titleAr: string;
-  sectionId: string;
-  contentCategoryId: string;
-  state: string;
-};
-
 export default async function Page({
   searchParams,
 }: {
@@ -42,17 +34,15 @@ export default async function Page({
   const canUpdate = hasPermission(admin, 'content.update');
   const query = new URLSearchParams({ page: String(page), pageSize: '20' });
   if (search) query.set('search', search);
-  const [inbox, years, semesters, courses, sections, categories, targets, uploadConfig] =
-    await Promise.all([
-      serverApi<PageResult<InboxFile>>(`telegram-inbox?${query}`),
-      allCatalogItems<Option>('years', { active: 'true' }),
-      allCatalogItems<Option>('semesters', { active: 'true' }),
-      allCatalogItems<Option>('courses', { active: 'true' }),
-      allCatalogItems<Option>('sections', { active: 'true' }),
-      allCatalogItems<Option>('content-types', { active: 'true' }),
-      canUpdate ? serverApi<{ items: ContentTarget[] }>('content/upload-targets') : { items: [] },
-      getUploadConfig(),
-    ]);
+  const [inbox, years, semesters, courses, sections, categories, uploadConfig] = await Promise.all([
+    serverApi<PageResult<InboxFile>>(`telegram-inbox?${query}`),
+    allCatalogItems<Option>('years', { active: 'true' }),
+    allCatalogItems<Option>('semesters', { active: 'true' }),
+    allCatalogItems<Option>('courses', { active: 'true' }),
+    allCatalogItems<Option>('sections', { active: 'true' }),
+    allCatalogItems<Option>('content-types', { active: 'true' }),
+    getUploadConfig(),
+  ]);
   return (
     <TelegramInboxManager
       items={inbox.items}
@@ -65,7 +55,6 @@ export default async function Page({
       courses={courses.items}
       sections={sections.items}
       categories={categories.items}
-      targets={targets.items}
       canCreate={canCreate}
       canUpdate={canUpdate}
       canDelete={hasPermission(admin, 'content.archive')}
